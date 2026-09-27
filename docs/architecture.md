@@ -234,7 +234,7 @@ Band implication: carriers below 6 MHz are directly representable. WSPR **160 m 
 80 m (3 568.6 kHz)** are the suitable initial test bands (spec §9). **40 m (7 038.6 kHz) and higher
 are not directly representable at a 12 MHz sample rate** and need a faster output stage (higher sample
 clock/SERDES or an external mixer/filter chain). Filtering/harmonics are external hardware (plan §19),
-flagged for [`docs/rf.md`](rf.md) (currently a 0-byte placeholder).
+detailed in [`docs/rf.md`](rf.md).
 
 ## 12. Current implementation status
 
@@ -257,13 +257,14 @@ symbols (`reference/README.md`; spec §2–§5). GPS/timing verification detail 
 
 - Calibration → increment datapath in RTL (§8 status): `cal_hz` is validated and frozen but the
   modulator increments are build-time generics.
-- `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/rf.md`, `docs/verification.md`,
+- `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/verification.md`,
   `docs/lab.md` — 0-byte placeholders.
 - Hardware bring-up: no iCEBreaker was attached during environment setup (`docs/environment.md` §4).
   PENDING-HARDWARE items (spec §16): board revision, ~2.8 V GPS I/O levels, 1PPS pulse width, which
   NMEA sentences are actually emitted, FTDI/UART, RF pin ratification.
-- `docs/lessons.md` (plan §33 teaching walkthrough) is new; Lessons 10–11 (SDR waterfall, WSPRnet
-  spotting) still lack artifacts (`docs/rf.md`, a captured WAV, `docs/verification.md`).
+- `docs/lessons.md` (plan §33 teaching walkthrough) is new; Lesson 11 (WSPRnet spotting) still
+  lacks its artifact (`docs/verification.md`, a captured WAV); `docs/rf.md` is now written
+  (band selection + filter requirements, measurement items PENDING-HARDWARE).
 
 ## 13. Sources
 

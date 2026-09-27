@@ -44,7 +44,7 @@ The layout follows the plan's "Recommended Repository Structure" (§27) exactly.
 fully implemented through integration (Phases 0–5 plus the pedagogical review): all RTL blocks have
 committed testbenches, `make sim` runs 13/13 passing, `make` produces `build/top.bin`. Genuinely
 empty placeholders that remain: `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`,
-`docs/rf.md`, `docs/verification.md`, `docs/lab.md` (status in `docs/architecture.md` §12).
+`docs/verification.md`, `docs/lab.md` (status in `docs/architecture.md` §12).
 
 ## Building (after Phase 1)
 

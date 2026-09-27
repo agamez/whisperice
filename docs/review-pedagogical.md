@@ -84,7 +84,7 @@ every recalibration window and stays low on error); comments and TB header updat
 
 **M6 — stale "empty placeholders" claims** in `README.md` and `docs/environment.md` §5 would
 mislead a student opening the repo. **Resolution**: both updated; the genuinely empty files are
-listed explicitly (`src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/rf.md`,
+listed explicitly (`src/clock/clock_control.vhd`, `tools/inspect_wspr.py`,
 `docs/verification.md`, `docs/lab.md`).
 
 **M7 — the integration test never checked symbol content.** **Resolution**: `tb_wspr_top` now
@@ -176,7 +176,8 @@ plan §8 and not re-litigated in RTL.
 
 ## 7. Still open
 
-- Lessons 10–11 artifacts: `docs/rf.md` (band selection), a captured/simulated WAV + `wsprd`
+- Lessons 10–11 artifacts: Lesson 10's `docs/rf.md` has since been written (band selection, tone-
+  order rule, filter requirements); still open: a captured/simulated WAV + `wsprd`
   adjudication record (`docs/verification.md`), `tools/inspect_wspr.py`, `docs/lab.md`.
 - Hardware bring-up (PENDING-HARDWARE, spec §16): `iceprog -t` has never run against a board.
 - v1 gap (documented, deliberate): calibrated `cal_hz` is validated/frozen but the modulator

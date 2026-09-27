@@ -191,11 +191,13 @@ rising edge, and what stale-level bug does that prevent?
 carrier must sit below Nyquist (6 MHz at 12 MHz) to be directly observable — hence 160 m/80 m for
 first tests (see `architecture.md` §11).
 
-**Read.** `docs/protocol.md` §8 (folding caveat), `docs/rf.md` *(placeholder — to be written:
-band selection and filtering plan)*.
+**Read.** `docs/protocol.md` §8 (folding caveat), `docs/rf.md` (band table, tone-order rule,
+filter requirements).
 
-**Run.** No artifact yet: the closest is `tb_wspr_modulator` Run C. *To do*: dump a simulated
-`rf_out` to WAV and plot its spectrum (`tools/inspect_wspr.py` — placeholder).
+**Run.** `python3 tools/check_tone_order.py` — proves the tone-order rule of `rf.md` §1
+numerically on the real increments (RF line correct, fold inverted, fold ~15 dB stronger).
+*To do*: dump a simulated `rf_out` to WAV and plot its spectrum (`tools/inspect_wspr.py` —
+placeholder).
 
 **Observe.** (Planned) the four tone lines at the correct spacing; the fold for a >6 MHz carrier.
 
@@ -217,6 +219,7 @@ tones into a WAV) and run `/usr/bin/wsprd <file.wav>`; record DT/SNR/callsign in
 ---
 
 **Status after the pedagogical review (2026-09-27):** Lessons 1–9 are fully walkable with
-committed, passing testbenches (13/13 under `make sim`). Lessons 10–11 need the artifacts marked
-*to do* above (`docs/rf.md`, `docs/verification.md`, `tools/inspect_wspr.py`, a WAV capture) —
+committed, passing testbenches (13/13 under `make sim`). Lesson 10 is walkable from the newly
+written `docs/rf.md` (its spectrum plot still needs a WAV capture). Lesson 11 needs the artifacts
+marked *to do* above (`docs/verification.md`, `tools/inspect_wspr.py`, a WAV capture) —
 tracked in `review-pedagogical.md` §7.
