@@ -21,6 +21,15 @@
 -- irrelevant against the 1.46 Hz tone spacing).  The accumulator is only cleared when a
 -- transmission STARTS (RF is off before and after), never mid-TX.
 --
+-- Interface note (pedagogical review finding M1): the modulator OWNS the
+-- symbol counter and indexes the full tone vector (`tones`) itself.  An
+-- earlier interface took a 2-bit symbol_index from an external mux driven
+-- by the scheduler's counter -- but the registered symbol_tick let the
+-- scheduler advance one cycle AFTER the modulator latched, skewing the
+-- transmitted sequence by one symbol (scratch sim: tones (0,0,1,2,...)
+-- instead of (0,1,2,...), symbol 161 never sent).  Owning the index makes
+-- the skew structurally impossible.
+--
 -- Symbol timing (plan section 10): one WSPR symbol lasts 8192/12000 s
 -- (spec section 6).  At CLOCK_HZ = 12,000,000 that is exactly 8,192,000 cycles.
 -- For an off-nominal (calibrated) clock the per-symbol cycle count is
@@ -37,6 +46,10 @@
 -- 162-symbol transmission (plan section 10: no cumulative rounding error).
 -- All intermediate products fit 32-bit integers: (CLOCK_HZ mod 12000) * 8192
 -- < 98,296,000.
+--
+-- Worked example (CLOCK_HZ = 12001): WHOLE = 8192, REM = 8192, so lengths
+-- alternate 8192/8193 and the cumulative length of all 162 symbols is
+-- EXACTLY floor(162 * 12001 * 8192 / 12000) cycles (review finding S5).
 --
 -- Provenance of the default increments (tools/calculate_nco.py at 12 MHz,
 -- spec section 9 default RF 10140200 Hz):
@@ -68,7 +81,12 @@ entity wspr_modulator is
     clk          : in  std_logic;
     rst          : in  std_logic;
     tx_start     : in  std_logic;
-    symbol_index : in  std_logic_vector(1 downto 0);
+    -- The full channel-symbol vector (2 bits per symbol, tones(2i)=sync,
+    -- tones(2i+1)=data, value = 2*data + sync -- spec section 5).  The
+    -- modulator owns the symbol counter and indexes this vector itself:
+    -- an external index mux cannot stay cycle-aligned with the registered
+    -- symbol_tick (pedagogical review finding M1: a one-symbol skew).
+    tones        : in  std_logic_vector(0 to 2 * SYMBOLS_PER_TX - 1);
     rf_out       : out std_logic;
     tx_active    : out std_logic;
     symbol_tick  : out std_logic
@@ -83,15 +101,15 @@ architecture rtl of wspr_modulator is
 
   -- Exact split of cycles_per_symbol = CLOCK_HZ * SYMBOL_NUM / SYMBOL_DEN into
   -- WHOLE + REM/SYMBOL_DEN (fits 32-bit: (CLOCK_HZ mod 12000) * 8192 < 2^31).
-  function sym_whole(clock_hz : positive) return natural is
+  function sym_whole(f_clk : positive) return natural is
   begin
-    return (clock_hz / SYMBOL_DEN) * SYMBOL_NUM
-         + ((clock_hz mod SYMBOL_DEN) * SYMBOL_NUM) / SYMBOL_DEN;
+    return (f_clk / SYMBOL_DEN) * SYMBOL_NUM
+         + ((f_clk mod SYMBOL_DEN) * SYMBOL_NUM) / SYMBOL_DEN;
   end function sym_whole;
 
-  function sym_rem(clock_hz : positive) return natural is
+  function sym_rem(f_clk : positive) return natural is
   begin
-    return ((clock_hz mod SYMBOL_DEN) * SYMBOL_NUM) mod SYMBOL_DEN;
+    return ((f_clk mod SYMBOL_DEN) * SYMBOL_NUM) mod SYMBOL_DEN;
   end function sym_rem;
 
   constant WHOLE_CYCLES : natural := sym_whole(CLOCK_HZ);
@@ -126,6 +144,7 @@ architecture rtl of wspr_modulator is
   signal active_r    : std_logic := '0';
   signal symbol_cnt         : natural range 0 to SYMBOLS_PER_TX := 0;
   signal symbol_latched     : natural range 0 to 3 := 0;
+  signal symbol_idx         : natural range 0 to SYMBOLS_PER_TX - 1 := 0;
   signal cycle_cnt          : natural range 0 to 2**LEN_BITS-1 := 0;
   signal cur_len            : natural range 1 to 2**LEN_BITS-1 := WHOLE_CYCLES;
   signal err                : natural range 0 to SYMBOL_DEN-1 := 0;
@@ -137,6 +156,7 @@ begin
   -- Single synchronous process: phase accumulator + symbol timing FSM.
   process (clk)
     variable err_v : natural;
+    variable nxt   : std_logic_vector(1 downto 0);
   begin
     if rising_edge(clk) then
       tick_r <= '0';                      -- default: 1-cycle pulse
@@ -148,6 +168,7 @@ begin
         acc         <= (others => '0');
         symbol_cnt  <= 0;
         symbol_latched <= 0;
+        symbol_idx  <= 0;
         cycle_cnt   <= 0;
         cur_len     <= WHOLE_CYCLES;
         err         <= 0;
@@ -168,13 +189,18 @@ begin
         -- Symbol timing: boundary when the in-symbol cycle counter expires.
         if cycle_cnt = cur_len - 1 then
           tick_r           <= '1';        -- boundary pulse (1 cycle)
-          symbol_latched   <= to_integer(unsigned(symbol_index));
           cycle_cnt        <= 0;
           if symbol_cnt + 1 = SYMBOLS_PER_TX then
             active_r      <= '0';         -- end of transmission
             rf_r          <= '0';
           else
             symbol_cnt    <= symbol_cnt + 1;
+            symbol_idx    <= symbol_idx + 1;
+            -- the NEXT symbol's tone, from the tone vector at the new index:
+            -- field (2i)=sync, (2i+1)=data -> value 2*data+sync
+            nxt := tones(2 * (symbol_idx + 1) + 1)  -- data bit (MSB)
+                       & tones(2 * (symbol_idx + 1));  -- sync bit (LSB)
+            symbol_latched <= to_integer(unsigned(nxt));
             -- Bresenham floor-distribution of REM/SYMBOL_DEN (see header).
             -- The length of the ENTERING symbol k+1 is WHOLE+1 iff
             -- ((k+1)*REM mod DEN) >= DEN-REM, so the error state must be
@@ -199,7 +225,9 @@ begin
         acc            <= (others => '0');
         rf_r           <= '0';
         symbol_cnt     <= 0;
-        symbol_latched <= to_integer(unsigned(symbol_index));
+        symbol_idx     <= 0;
+        nxt := tones(1) & tones(0);
+        symbol_latched <= to_integer(unsigned(nxt));
         cycle_cnt      <= 0;
         err            <= 0;
         cur_len        <= WHOLE_CYCLES;    -- symbol 0: extra = 0 (err = 0 < REM bound)

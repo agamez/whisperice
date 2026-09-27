@@ -34,13 +34,13 @@ every transmission, and emits continuous-phase 4-FSK from one GPIO pin. Success 
                                                                 ▼
  wspr_message ─► wspr_fec ─► wspr_interleave ─► wspr_symbols ─► (162 × 2-bit tones)
       ▲                                                                  │
- CALLSIGN GRID4 POWER_dBm                              symbol_index mux (top level)
+ CALLSIGN GRID4 POWER_dBm
                                                                         │
-                                                                        ▼
+                                                         ▼
                                             wspr_modulator  (ONE phase accumulator,
-                                                              continuous-phase 4-FSK)
-                                                                        │
-                                                                   rf_out (1 bit)
+                                              owns the symbol counter and indexes
+                                              the tone vector itself -- review
+                                              finding M1; continuous-phase 4-FSK)
                                                                         │
                                   external LPF/BPF + optional PA ──► antenna (plan §19)
 
@@ -65,11 +65,14 @@ must be high or a one-cycle `framing_error` is raised and the byte discarded. Bi
 `CLOCK_HZ/BAUD_RATE` (1250 cycles at 12 MHz). Outputs `data(7:0)`, `data_valid`, `framing_error`. No
 FIFO/overrun path: a dropped byte merely aborts one sentence (plan §31 safe).
 ### 4.2 `src/gps/gps_parser.vhd`
-Minimal parser accepting only `$--RMC` (`SENTENCE_TYPE = "RMC"`). It commits only if the XOR checksum
+Minimal parser accepting only `$--RMC` (the address field is matched literally on the characters
+`'R'`,`'M'`,`'C'`). It commits only if the XOR checksum
 between `$` and `*` matches, the address ends in RMC, field 2 carried exactly six digits forming a
 valid `hh:mm:ss`, and field 3 status is `A`. Outputs `time_strobe`, `hour`, `minute`, `second`,
 `fix_valid`, `sentence_error` and `fix_warning` (checksum-valid RMC with status `V` = fix lost).
-Rejected sentences never change committed outputs (spec §12; plan §31). RMC presence is
+Rejected sentences never change committed outputs (spec §12; plan §31). A `$` that arrives directly
+after the checksum (stream without CRLF) re-arms the parser immediately instead of being swallowed.
+RMC presence is
 PENDING-HARDWARE (spec §16). NMEA arrival time is never a time reference (plan §11).
 ### 4.3 `src/gps/gps_time.vhd`
 UTC timekeeping disciplined by 1PPS. **1PPS is primary**: `pps_tick` advances one second; a committed
@@ -96,8 +99,10 @@ are levels that persist after the window, so consumers act on edges.
 Slot scheduler, FSM `WAIT_GPS → CALIBRATE → READY → WAIT_SLOT → TX → TX_DONE` (`state_o` = 0..5). It
 fires TX when `minute_even='1'` **and** `second=1` (spec §7: +1.000 s into the even UTC minute)
 **and** `slot_mask(minute/2)='1'` (`slot_mask(0 to 29)`, default all-ones; plan §12). `tx_enable` is a
-1-cycle pulse into `wspr_modulator.tx_start`; the modulator's `symbol_tick` advances `symbol_index`
-0..161 and the top-level mux feeds the codec tone vector to the modulator. The calibration handshake
+1-cycle pulse into `wspr_modulator.tx_start`. The scheduler counts `symbol_tick` internally to detect
+the end of the transmission (162 ticks), but the **modulator owns the symbol index** and selects tones
+from the codec vector itself (review finding M1: an external scheduler-driven index was skewed by one
+symbol; see §6.1). The calibration handshake
 is edge-based: `READY` only on a fresh `cal_valid` rising edge; `cal_error` re-pulses `cal_start`.
 `TX_DONE` returns to `CALIBRATE`, so every transmission is preceded by a fresh calibration (plan §7).
 
@@ -123,14 +128,26 @@ All constants and primary WSJT-X 2.7.0 citations are in [`docs/protocol.md`](pro
 ## 6. Modulator and NCO blocks
 ### 6.1 `src/wspr/wspr_modulator.vhd`
 Continuous-phase 4-FSK modulator (plan §10, §17). Generics `CLOCK_HZ = 12_000_000`,
-`CARRIER_INCREMENT = x"D8530323E9"`, `TONE_INCREMENT = 134217`, `SYMBOLS_PER_TX = 162`,
+`CARRIER_INCREMENT = x"D8530323E9"`, `HALF_TONE_INCREMENT = 67109`, `SYMBOLS_PER_TX = 162`,
 `ACCUMULATOR_BITS = 40`. **One shared phase accumulator** serves the whole transmission, so phase is
-continuous across symbol boundaries; per clock `phase_increment = CARRIER_INCREMENT + TONE_INCREMENT *
-symbol`. Symbol timing uses an exact fractional split `cycles_per_symbol = CLOCK_HZ * 8192 / 12000`
+continuous across symbol boundaries. The modulator **owns the symbol counter**: it takes the full
+162-entry tone vector `tones(0 to 323)` (2 bits per symbol: field `2k` = sync, `2k+1` = data) and, at
+each symbol boundary, advances to the next symbol and selects that symbol's increment **in the same
+clock cycle**. The per-symbol increments realize the centered tone grid of spec §6:
+
+    inc(k) = CARRIER_INCREMENT + (2k − 3) · HALF_TONE_INCREMENT      (k = 0..3)
+
+precomputed as constants `INC_T0..T3` (a runtime multiplier would cost ~130 ns at 12 MHz).
+`HALF_TONE_INCREMENT = 67109` is exactly half the rounded tone-spacing increment (12000/8192 Hz);
+`2·67109 = 134218` differs from the single-step increment `134217` by +1 LSB ≈ 1.1e-5 Hz
+(`tools/calculate_nco.py`, `wspr_modulator.vhd` header). Symbol timing uses an exact fractional split
+`cycles_per_symbol = CLOCK_HZ * 8192 / 12000`
 with Bresenham floor distribution, so the cumulative length of N symbols is exactly
 `floor(N * CLOCK_HZ * 8192 / 12000)` cycles (≤ 1 cycle error over all 162 symbols — no cumulative
 rounding, plan §10). Outputs `rf_out` (MSB), `tx_active`, `symbol_tick`; reset clears the accumulator
 and forces RF off (spec §12/plan §31). Increment provenance: `tools/calculate_nco.py` (spec §9).
+The top level passes `ACCUMULATOR_BITS`/`CARRIER_INCREMENT`/`HALF_TONE_INCREMENT` through so
+testbenches can scale them (plan §21).
 ### 6.2 `src/nco/nco.vhd`
 Standalone 40-bit phase-accumulator NCO (Phase 4, spec §8): `f_out = increment * f_clk / 2**40`,
 resolution ≈ 1.0914e-5 Hz at 12 MHz; `rf_out` is the accumulator MSB (1-bit square wave, no sine
@@ -139,12 +156,17 @@ the modulator (§6.1), which embeds the same accumulator principle plus the symb
 
 ## 7. Top level and integration
 
-`src/top.vhd` is the integration point: it must connect the GPS/time chain, codec, symbol-index mux,
-modulator and diagnostic LEDs, assigning pins only from `constraints/icebreaker.pcf` (never invented;
-`AGENTS.md` §2.4, spec §11). As committed, `top.vhd` is still the **Phase 1 bring-up** (plan §5):
-`clk` (pin 35) divided to two LED blink rates on `led1` (LEDR_N, pin 11) and `led2` (LEDG_N, pin 37),
-and the PCF assigns only `clk`/`led1`/`led2`. Full integration is in progress;
-`sim/tb_wspr_top.vhd` is an empty placeholder.
+`src/top.vhd` **is** the integration point and integrates the full chain: POR (16-cycle power-on
+reset), GPS/UART chain (`gps_uart → gps_parser → gps_time`), `pps_measure` + `clock_calibration`,
+`wspr_scheduler`, the codec chain (`wspr_message → fec → interleave → symbols`), `wspr_modulator`
+and the diagnostic LEDs. Pin assignments come only from `constraints/icebreaker.pcf` (never invented;
+`AGENTS.md` §2.4, spec §11): `clk` 35, `led1` 11 (LEDR_N), `led2` 37 (LEDG_N), `uart_rx` 47
+(PmodGPS TX), `pps` 45 (1PPS), `rf_out` 28 (P1B10). The bench message is frozen to
+"K1ABC FN42 37" (spec §2; simulation/bench use only — plan §25). All generics are pass-throughs
+so testbenches can scale parameters without changing the functional logic (plan §21).
+Integration test: `sim/tb_wspr_top.vhd` (scaled CLOCK_HZ/BAUD/CALIBRATION_SECONDS/NCO, checks slot
+timing, window length, total transitions and — since review finding M7 — the tone identity of all
+162 symbols against the golden vector).
 
 ## 8. Clock-calibration loop
 
@@ -173,7 +195,7 @@ governing rule.
 |---|---|---|
 | No GPS | NO TX | `gps_time.utc_valid='0'` → `wspr_scheduler` stays in `WAIT_GPS` |
 | GPS loses fix | Do not start a new transmission until a valid reference returns | `gps_parser.fix_warning` (RMC status `V`) → `gps_time` drops `utc_valid` → `WAIT_GPS`; a TX already in progress runs to completion (documented decision; a mid-TX RF cut is rejected) |
-| PPS disappears | Invalidate calibration | `pps_measure.measurement_valid='0'` after `TIMEOUT_CYCLES`; `clock_calibration` abandons/invalidates; scheduler cannot re-enter `READY` on a stale level |
+| PPS disappears | Invalidate calibration | `pps_measure.measurement_valid='0'` after `TIMEOUT_CYCLES`; `clock_calibration` abandons/invalidates **a window in progress**. Documented v1 semantics (review finding S9): after a window has *completed*, `calibration_valid` persists even if the PPS later disappears — the measurement was validly taken, and the scheduler only re-enters `READY` on a fresh `cal_valid` edge after the next successful calibration. The scheduler does not re-check `cal_valid`/`measurement_valid` while idling in `WAIT_SLOT`. |
 | Corrupt NMEA | Do not change the existing valid time | `gps_parser` rejects and retains committed outputs (`sentence_error`) |
 | Measured frequency out of bounds | Error state, do not transmit | `clock_calibration.calibration_error='1'`, `calibration_valid='0'`; scheduler retries calibration |
 | Invalid PLL/clock | Do not transmit | No PLL in v1; calibration bounds gate an implausible clock; no TX without a fresh valid calibration |
@@ -183,9 +205,10 @@ governing rule.
 
 Plan §32 / spec §13 require observability without a CPU. Current access points:
 
-- **LEDs.** `top` drives the two onboard user LEDs active-low: `led1` = LEDR_N (pin 11), `led2` =
-  LEDG_N (pin 37) (spec §11). In the committed Phase 1 top they blink at 1.0/0.5 Hz to show the
-  12 MHz clock is alive; not yet repurposed to GPS/PPS/TX status.
+- **LEDs.** `top` drives the two onboard user LEDs active-low: `led1` = LEDR_N (pin 11) is the
+  **heartbeat** (period 1 s: 0.5 s high, 0.5 s low — the 12 MHz clock and POR are alive); `led2` =
+  LEDG_N (pin 37) is the **ready indicator**: lit while `utc_valid AND calibration_valid`
+  (dark during every recalibration window and on a calibration error — review finding M5).
 - **Scheduler state.** `wspr_scheduler.state_o` (0..5) = `WAIT_GPS`, `CALIBRATE`, `READY`,
   `WAIT_SLOT`, `TX`, `TX_DONE`.
 - **Internal signals in simulation** (named, no hidden magic numbers, plan §6): `gps_uart.data/
@@ -215,31 +238,32 @@ flagged for [`docs/rf.md`](rf.md) (currently a 0-byte placeholder).
 
 ## 12. Current implementation status
 
-**Implemented, with committed testbench and passing `ghdl --std=93` simulation** (Agent H re-ran all
-committed testbenches on 2026-09-27; all 13 non-empty testbenches pass):
+**Implemented end-to-end, with committed testbenches passing under `make sim`** (re-verified after
+the 2026-09-27 pedagogical review; 13/13 testbenches pass, `make build` produces `build/top.bin` with
+icetime PASS at ≥ 30 MHz):
 
 | Area | Blocks | Testbenches |
 |---|---|---|
 | GPS / timing | `gps_uart`, `gps_parser`, `gps_time`, `pps_measure`, `clock_calibration`, `wspr_scheduler` | `tb_gps_uart`, `tb_gps_parser`, `tb_gps_time`, `tb_pps_measure`, `tb_clock_calibration`, `tb_wspr_scheduler` |
 | Codec | `wspr_message`, `wspr_fec`, `wspr_interleave`, `wspr_sync`, `wspr_symbols` | `tb_wspr_message`, `tb_wspr_fec`, `tb_wspr_interleave`, `tb_wspr_symbols` |
 | NCO / modulator | `nco`, `wspr_modulator` | `tb_nco`, `tb_wspr_modulator` |
-| Phase-1 top | `top` (LED bring-up) | `tb_top` |
+| Integration | `top` (full chain + POR + LEDs) | `tb_wspr_top` (incl. tone-identity check against the golden vector) |
 
 Codec goldens are additionally cross-checked against the pinned reference encoder at 0/162 channel
 symbols (`reference/README.md`; spec §2–§5). GPS/timing verification detail is in [`docs/gps.md`](gps.md).
+(The stale Phase-1 `tb_top.vhd` was retired — it tested the superseded LED-only top; review finding M2.)
 
 **Pending / placeholder at the time of writing:**
 
-- Full signal-chain integration in `src/top.vhd` (committed `top.vhd` is Phase 1 LED bring-up only).
-- `sim/tb_wspr_top.vhd` — 0-byte placeholder (end-to-end integration test).
-- GPS (PMOD 1A) and RF (PMOD 1B) pins in `constraints/icebreaker.pcf` — only `clk`/`led1`/`led2`
-  assigned; the RF GPIO pin remains PROPOSED in spec §11 (P1B10 / pin 28).
+- Calibration → increment datapath in RTL (§8 status): `cal_hz` is validated and frozen but the
+  modulator increments are build-time generics.
 - `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/rf.md`, `docs/verification.md`,
   `docs/lab.md` — 0-byte placeholders.
-- Calibration → increment datapath in RTL (§8 status).
 - Hardware bring-up: no iCEBreaker was attached during environment setup (`docs/environment.md` §4).
   PENDING-HARDWARE items (spec §16): board revision, ~2.8 V GPS I/O levels, 1PPS pulse width, which
   NMEA sentences are actually emitted, FTDI/UART, RF pin ratification.
+- `docs/lessons.md` (plan §33 teaching walkthrough) is new; Lessons 10–11 (SDR waterfall, WSPRnet
+  spotting) still lack artifacts (`docs/rf.md`, a captured WAV, `docs/verification.md`).
 
 ## 13. Sources
 

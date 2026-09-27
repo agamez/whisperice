@@ -49,7 +49,6 @@ end entity gps_parser;
 
 architecture rtl of gps_parser is
 
-  constant SENTENCE_TYPE : string := "RMC";
   constant CR : character := character'val(13);
   constant LF : character := character'val(10);
 
@@ -80,12 +79,6 @@ architecture rtl of gps_parser is
   signal strobe_r : std_logic := '0';
   signal err_r    : std_logic := '0';
   signal warn_r   : std_logic := '0';
-
-  -- address-field match: SENTENCE_TYPE as characters
-  function type_char(i : positive) return character is
-  begin
-    return SENTENCE_TYPE(i);
-  end function type_char;
 
 begin
 
@@ -143,15 +136,19 @@ begin
                 char_in_field <= 0;
               else
                 char_in_field <= char_in_field + 1;
-                -- address field: slide the last three characters
+                -- address field: slide the last three characters.  Signal
+                -- semantics: the comparison below reads the OLD addr3
+                -- values, i.e. addr3(2)/addr3(3) are the two characters
+                -- received BEFORE ch, so (addr3(2), addr3(3), ch) is the
+                -- last three received (review finding S2).
                 if field_idx = 0 then
                   addr3(1) <= addr3(2);
                   addr3(2) <= addr3(3);
                   addr3(3) <= ch;
                   if char_in_field >= 2 then
-                    is_rmc <= (addr3(2) = type_char(1))
-                              and (addr3(3) = type_char(2))
-                              and (ch = type_char(3));
+                    is_rmc <= (addr3(2) = 'R')
+                              and (addr3(3) = 'M')
+                              and (ch = 'C');    -- match "RMC" literally
                   end if;
                 end if;
                 -- field 2: time digits hhmmss (ignore any .ss fraction).
@@ -232,6 +229,25 @@ begin
             else
               state <= ST_IDLE;             -- corrupt sentence: retain outputs
               err_r <= '1';
+            end if;
+
+            -- The byte consumed in this state is the one AFTER the checksum
+            -- (normally CR).  If the stream has no CRLF and it is already
+            -- the next '$', re-arm immediately so the next sentence is not
+            -- swallowed (review finding S8); this overrides the ST_IDLE
+            -- assignments above.
+            if ch = '$' then
+              state         <= ST_BODY;
+              checksum      <= (others => '0');
+              field_idx     <= 0;
+              char_in_field <= 0;
+              digit_cnt     <= 0;
+              status_ok     <= false;
+              is_rmc        <= false;
+              addr3         <= "   ";
+              p_hh          <= 0;
+              p_mm          <= 0;
+              p_ss          <= 0;
             end if;
 
           when others =>

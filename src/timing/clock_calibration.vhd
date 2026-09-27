@@ -24,10 +24,12 @@
 --
 --     C_avg = (1/N) * sum(i=1..N) C_i
 --
--- divides the quantisation-induced uncertainty of the mean by N, and reduces
--- random measurement noise (edge jitter, GPS/PPS jitter) by sqrt(N).  With the
--- default N = 8 the mean is good to well under 1 cycle/s -- far below the
--- tone spacing the NCO must resolve (docs/spec.md sections 6 and 8).
+-- reduces the standard error of the mean by about sqrt(N) for independent,
+-- dithered intervals (edge jitter, GPS/PPS jitter).  The WORST-CASE
+-- quantisation bias is not reduced by averaging -- it stays below 1 cycle/s
+-- (review finding S1: a bounded per-sample error does not shrink with N).
+-- With the default N = 8 the mean is good to well under 1 cycle/s -- far
+-- below the tone spacing the NCO must resolve (docs/spec.md sections 6/8).
 --
 -- The sum is formed in integer arithmetic and divided once at the end, with
 -- round-half-up:

@@ -147,9 +147,11 @@ If `iceprog -t` still fails after attach:
 
 ## 5. Repository skeleton
 
-Created exactly as specified in the plan §27 "Recommended Repository Structure". All `.vhd`,
-`.py`, `.pcf` and protocol `.md` files are **empty placeholders** — their content is the
-responsibility of the phase agents. The pre-existing `doc/` directory (orchestrator plan,
+Created exactly as specified in the plan §27 "Recommended Repository Structure". (Historical note
+from setup time: the files started as **empty placeholders**; they have since been implemented by
+the phase agents — see `docs/architecture.md` §12 for the current status. Genuinely empty today:
+`src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/rf.md`, `docs/verification.md`,
+`docs/lab.md`.) The pre-existing `doc/` directory (orchestrator plan,
 agent briefs, scoping decision) is a different, pre-existing directory and is left untouched;
 the plan-specified `docs/` directory exists alongside it.
 

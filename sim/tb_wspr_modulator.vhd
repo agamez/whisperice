@@ -34,8 +34,10 @@
 --     (c2) index 0 (inc 256): exactly 2048 rising transitions per symbol;
 --          index 3 (inc 448): exactly 3584 per symbol (both derived from the
 --          sample sequences, periods 4 and 16 dividing 8192);
---     (e)  a mid-symbol change of symbol_index leaves the symbol in progress
---          unperturbed and applies the new index exactly at the next tick.
+--     (e)  NO SKEW: the per-symbol transition classes follow the tones
+--          vector exactly (symbols 6..8 use tone 3 while 0..5 use tone 0) --
+--          this is the regression test for review finding M1 (a scheduler-
+--          driven index once skewed the sequence by one symbol).
 --
 -- Provenance: increments from tools/calculate_nco.py (frozen constants via
 -- docs/spec.md sections 6/9).  No golden RTL outputs: every expectation is
@@ -75,19 +77,21 @@ architecture sim of tb_wspr_modulator is
 
   signal a_clk : std_logic := '0';
   signal a_rst, a_start, a_rf, a_act, a_tick : std_logic;
-  signal a_idx  : std_logic_vector(1 downto 0) := "00";
+  signal a_tones : std_logic_vector(0 to 2 * 162 - 1) := (others => '0');
   signal a_done : boolean := false;
   signal a_fail : integer := 0;
 
   signal b_clk : std_logic := '0';
   signal b_rst, b_start, b_rf, b_act, b_tick : std_logic;
-  signal b_idx  : std_logic_vector(1 downto 0) := "00";
+  signal b_tones : std_logic_vector(0 to 2 * 162 - 1) := (others => '0');
   signal b_done : boolean := false;
   signal b_fail : integer := 0;
 
   signal c_clk : std_logic := '0';
   signal c_rst, c_start, c_rf, c_act, c_tick : std_logic;
-  signal c_idx  : std_logic_vector(1 downto 0) := "00";
+  -- Run C tone vector: symbols 0..5 = tone 0 ("00" field), 6..8 = tone 3
+  -- ("11": sync=1, data=1), 9..161 = tone 0.  Field (2i)=sync, (2i+1)=data.
+  signal c_tones : std_logic_vector(0 to 2 * 162 - 1) := (others => '0');
   signal c_done : boolean := false;
   signal c_fail : integer := 0;
 
@@ -102,7 +106,7 @@ begin
                  SYMBOLS_PER_TX => NUM_SYMS,
                  ACCUMULATOR_BITS => 40)
     port map (clk => a_clk, rst => a_rst, tx_start => a_start,
-              symbol_index => a_idx, rf_out => a_rf, tx_active => a_act,
+              tones => a_tones, rf_out => a_rf, tx_active => a_act,
               symbol_tick => a_tick);
 
   a_clk <= not a_clk after 50 ns when not a_done else '0';
@@ -203,7 +207,7 @@ begin
                  SYMBOLS_PER_TX => NUM_SYMS,
                  ACCUMULATOR_BITS => 40)
     port map (clk => b_clk, rst => b_rst, tx_start => b_start,
-              symbol_index => b_idx, rf_out => b_rf, tx_active => b_act,
+              tones => b_tones, rf_out => b_rf, tx_active => b_act,
               symbol_tick => b_tick);
 
   b_clk <= not b_clk after 50 ns when not b_done else '0';
@@ -272,7 +276,7 @@ begin
                  HALF_TONE_INCREMENT => HALF_TONE_INC_C, SYMBOLS_PER_TX => NUM_SYMS,
                  ACCUMULATOR_BITS => 10)
     port map (clk => c_clk, rst => c_rst, tx_start => c_start,
-              symbol_index => c_idx, rf_out => c_rf, tx_active => c_act,
+              tones => c_tones, rf_out => c_rf, tx_active => c_act,
               symbol_tick => c_tick);
 
   c_clk <= not c_clk after 50 ns when not c_done else '0';
@@ -283,7 +287,11 @@ begin
   -- to tone 0).
   stim_c : process
   begin
-    c_rst <= '1'; c_start <= '0'; c_idx <= "00";
+    c_rst <= '1'; c_start <= '0';
+    for i in 6 to 8 loop
+      c_tones(2 * i)     <= '1';          -- sync bit
+      c_tones(2 * i + 1) <= '1';          -- data bit -> tone value 3
+    end loop;
     wait until rising_edge(c_clk); wait until rising_edge(c_clk);
     c_rst <= '0';
     wait until rising_edge(c_clk);
@@ -293,12 +301,6 @@ begin
     for k in 0 to 4 loop                    -- symbols 0..4
       for i in 1 to 8192 loop wait until rising_edge(c_clk); end loop;
     end loop;
-    for i in 1 to 3000 loop wait until rising_edge(c_clk); end loop;
-    c_idx <= "11";                          -- mid-symbol change (symbol 5)
-    for i in 1 to C_HOLD_LEN loop
-      wait until rising_edge(c_clk);
-    end loop;
-    c_idx <= "00";                          -- applies at next boundary (symbol 9)
     wait until c_done;
     wait;
   end process;
@@ -333,13 +335,13 @@ begin
         count := count + 1;
       end if;
     end loop;
-    -- (c2) symbols 0..4: index-0 transition count.  Tolerance +-1: each
+    -- (c2) symbols 0..5: tone-0 transition count.  Tolerance +-1: each
     -- symbol's internal pairs exclude the boundary-crossing pair, whose
     -- rising/falling phase depends on the accumulator offset (the cyclic
     -- per-symbol count is exactly EXPECT_C_IDX0; the monitor sees it minus
     -- 0 or 1).  The tone classes are thousands apart, so +-1 cannot mask a
     -- missing or double-applied tone increment.
-    for i in 0 to 4 loop
+    for i in 0 to 5 loop
       if abs(edges(i) - EXPECT_C_IDX0) > 1 then
         report "FAIL C: symbol " & integer'image(i) & " transitions "
                & integer'image(edges(i)) & " not within +-1 of "
@@ -347,18 +349,8 @@ begin
         c_fail <= c_fail + 1;
       end if;
     end loop;
-    -- (e) symbol 5 in progress at the mid-symbol change: unperturbed
-    if len(5) /= 8192 then
-      report "FAIL C: symbol 5 length perturbed: " & integer'image(len(5))
-             severity error;
-      c_fail <= c_fail + 1;
-    end if;
-    if abs(edges(5) - EXPECT_C_IDX0) > 1 then
-      report "FAIL C: symbol 5 transitions perturbed: "
-             & integer'image(edges(5)) severity error;
-      c_fail <= c_fail + 1;
-    end if;
-    -- symbols 6,7,8 = index 3; symbols 9..12 back to index 0
+    -- (e) NO SKEW: symbol 6 is the FIRST tone-3 symbol (a one-symbol skew
+    -- would put tone 0 here and shift the rest)
     for i in 6 to 8 loop
       if abs(edges(i) - EXPECT_C_IDX3) > 1 then
         report "FAIL C: symbol " & integer'image(i) & " transitions "

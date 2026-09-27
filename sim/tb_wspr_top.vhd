@@ -8,6 +8,13 @@
 --   TIMEOUT_CYCLES = 50000    -> PPS loss invalidates after 50k cycles
 --   CAL bounds 10000..14000   -> the synthetic 12000-cycle PPS period is in
 --                                bounds (12000 cycles measured per PPS)
+--   NCO scaled (ACCUMULATOR_BITS = 10, CARRIER_INCREMENT = 256,
+--   HALF_TONE_INCREMENT = 64) -> tone increments 64/192/320/448, all four
+--   tones below Nyquist (no folding), and because 8192 * inc / 2^10 is an
+--   exact integer the phase advances a whole number of wraps per symbol:
+--   every symbol shows exactly 8*inc rising edges -> the tone class is
+--   directly observable (needed by check 8; the previous unscaled 40-bit
+--   pattern folded all four tones together and could not show tone identity).
 --
 -- Stimulus:
 --   * One good RMC sentence ($GPRMC,123519,A*07 -- checksum = XOR of
@@ -20,15 +27,22 @@
 --
 -- Checks:
 --   1. ready LED (led2, active-low) drops within a bounded time (UTC valid
---      AND calibration frozen).
+--      AND calibration valid).
 --   2. rf_out is OFF just before the expected TX instant (cycle TX_START-m).
 --   3. rf_out is active right after the expected TX instant.
---   4. rf_out transitions during the TX window: ~ (0.155/2)*1,327,104 rising
---      edges for the folded 40-bit MSB pattern; tolerance +-10%.
+--   4. rf_out transition TOTAL equals the sum over the golden tone vector
+--      (2 * 8 * increment per symbol) within +-4 events.
 --   5. rf_out active window length = 162 * 8192 cycles within +-200 cycles.
 --   6. rf_out OFF after the TX ends.
 --   7. recalibration before the next TX: led2 goes dark (cal window re-runs)
 --      shortly after TX end, then ready again.
+--   8. TONE IDENTITY (review findings M1/M7): for every symbol k the
+--      observed rising-edge count must match TONE_GOLDEN(k) (512 + 1024*tone
+--      with the scaled NCO, +-2 for the anchored first and truncated last
+--      window).  A one-symbol skew -- the M1 bug -- compares symbol k against
+--      TONE_GOLDEN(k-1) and fails here.  Golden vector: wsprcode
+--      "K1ABC FN42 37" (WSJT-X 2.7.0), same as sim/tb_wspr_symbols.vhd and
+--      reference/test_vectors/k1abc_fn42_37.txt.
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -53,6 +67,24 @@ architecture sim of tb_wspr_top is
   constant TX_TICK    : positive := 42;      -- PPS tick at which TX fires
   constant TX_START   : positive := PPS_START + (TX_TICK - 1) * PPS_PERIOD;
 
+  type tone_array is array (natural range <>) of integer range 0 to 3;
+  type int_vec_t is array (natural range <>) of integer;
+
+  -- 162 channel symbols from wsprcode "K1ABC FN42 37" (WSJT-X 2.7.0) --
+  -- identical to sim/tb_wspr_symbols.vhd and
+  -- reference/test_vectors/k1abc_fn42_37.txt (review finding M7).
+  constant TONE_GOLDEN : tone_array(0 to 161) := (
+    3, 3, 0, 0, 2, 0, 0, 0, 1, 0, 2, 0, 1, 3, 1, 2, 2, 2,
+    1, 0, 0, 3, 2, 3, 1, 3, 3, 2, 2, 0, 2, 0, 0, 0, 3, 2,
+    0, 1, 2, 3, 2, 2, 0, 0, 2, 2, 3, 2, 1, 1, 0, 2, 3, 3,
+    2, 1, 0, 2, 2, 1, 3, 2, 1, 2, 2, 2, 0, 3, 3, 0, 3, 0,
+    3, 0, 1, 2, 1, 0, 2, 1, 2, 0, 3, 2, 1, 3, 2, 0, 0, 3,
+    3, 2, 3, 0, 3, 2, 2, 0, 3, 0, 2, 0, 2, 0, 1, 0, 2, 3,
+    0, 2, 1, 1, 1, 2, 3, 3, 0, 2, 3, 1, 2, 1, 2, 2, 2, 1,
+    3, 3, 2, 0, 0, 0, 0, 1, 0, 3, 2, 0, 1, 3, 2, 2, 2, 2,
+    2, 0, 2, 3, 3, 2, 3, 2, 3, 3, 2, 0, 0, 3, 1, 2, 2, 2
+  );
+
   signal clk    : std_logic := '0';
   signal uart_rx: std_logic := '1';
   signal pps    : std_logic := '0';
@@ -62,6 +94,8 @@ architecture sim of tb_wspr_top is
   signal done   : boolean := false;
   signal fails  : integer := 0;
   signal rf_edges : integer := 0;
+  -- rising edges observed inside each symbol window (tone_mon below)
+  signal sym_edges : int_vec_t(0 to NUM_SYMS - 1) := (others => 0);
 
 begin
 
@@ -73,7 +107,10 @@ begin
       TIMEOUT_CYCLES      => 50000,
       CAL_MIN_HZ          => 10000,
       CAL_MAX_HZ          => 14000,
-      SYMBOLS_PER_TX      => NUM_SYMS
+      SYMBOLS_PER_TX      => NUM_SYMS,
+      CARRIER_INCREMENT   => x"0000000100",   -- 256 (scaled carrier)
+      HALF_TONE_INCREMENT => 64,              -- scaled half spacing
+      ACCUMULATOR_BITS    => 10               -- scaled accumulator
     )
     port map (clk => clk, uart_rx => uart_rx, pps => pps, rf_out => rf_out,
               led1 => led1, led2 => led2);
@@ -102,11 +139,49 @@ begin
     end loop;
   end process pps_gen;
 
+  -- Per-symbol rising-edge monitor (check 8).  Anchored on the first rf_out
+  -- rise; every later window is exactly SYMBOL_LEN cycles.  rf_out is the
+  -- DUT's registered output, so sampling it at rising_edge(clk) sees the
+  -- previous cycle's value -- a consistent one-cycle delay that does not
+  -- change any count.  With the scaled NCO the phase advances 8*increment
+  -- whole wraps per 8192-cycle symbol, so each window shows exactly
+  -- 8*increment = 512 + 1024*tone rising edges (windows 0 and 161 may be
+  -- 1-2 short: the anchor sample and the gated tail).
+  tone_mon : process (clk)
+    variable prev    : std_logic := '0';
+    variable started : boolean := false;
+    variable cyc     : integer := 0;
+    variable k       : integer := 0;
+    variable trans   : integer := 0;
+  begin
+    if rising_edge(clk) then
+      if started and k < NUM_SYMS then
+        if prev = '0' and rf_out = '1' then
+          trans := trans + 1;
+        end if;
+        cyc := cyc + 1;
+        if cyc = SYMBOL_LEN then
+          sym_edges(k) <= trans;
+          k     := k + 1;
+          cyc   := 0;
+          trans := 0;
+        end if;
+      elsif rf_out = '1' and prev = '0' then
+        started := true;             -- anchor: first rf rise opens window 0
+        cyc     := 0;
+        trans   := 0;
+      end if;
+      prev := rf_out;
+    end if;
+  end process tone_mon;
+
   main : process
     -- rf window measurement state
     variable t0, t1 : time := 0 ns;
     variable edges  : integer := 0;
     variable len    : integer := 0;
+    variable exp_total : integer := 0;
+    variable exp_edges : integer := 0;
     -- serialize one byte, 8N1, LSB first
     procedure send_byte(byte : in std_logic_vector(7 downto 0)) is
     begin
@@ -175,16 +250,23 @@ begin
     end if;
 
     -- 4: let the TX run to its end (162 * 8192 cycles); the rf_cnt process
-    --    counts every rf_out transition (expected ~0.31 toggles/cycle for
-    --    alpha = 0.845 over 1,327,104 cycles -> ~411k; accept +-10%)
+    --    counts every rf_out transition.  With the scaled NCO the exact
+    --    expectation is the sum over the golden vector of 2*8*increment
+    --    events per symbol (+-4 absorbs the anchored first window, the
+    --    gated tail and the final edge).
     while now < (TX_START + TX_LEN + SYMBOL_LEN) * CLK_PERIOD loop
       wait for CLK_PERIOD;
     end loop;
     wait for 2 * CLK_PERIOD;              -- let the last events land
     edges := rf_edges;
-    if edges < 365000 or edges > 455000 then
-      report "FAIL: rf transition count " & integer'image(edges)
-             & " outside 365k..455k" severity error;
+    exp_total := 0;
+    for k in TONE_GOLDEN'range loop
+      exp_total := exp_total + 2 * (512 + 1024 * TONE_GOLDEN(k));
+    end loop;
+    if abs(edges - exp_total) > 4 then
+      report "FAIL: rf transition total " & integer'image(edges)
+             & " vs expected " & integer'image(exp_total) & " (+-4)"
+             severity error;
       fails <= fails + 1;
     end if;
     -- 5: rf settles OFF exactly at the window end
@@ -194,7 +276,24 @@ begin
     else
       report "tb_wspr_top: TX window " & integer'image(TX_LEN)
              & " cycles, transitions " & integer'image(edges)
-             & " (365k..455k), rf settled OFF";
+             & " (expected " & integer'image(exp_total) & " +-4), rf OFF";
+    end if;
+
+    -- 8: TONE IDENTITY (review findings M1/M7): symbol k must show the
+    --    rising-edge count of TONE_GOLDEN(k).  A one-symbol skew -- the M1
+    --    bug -- would compare symbol k against TONE_GOLDEN(k-1) and fail.
+    for k in 0 to NUM_SYMS - 1 loop
+      exp_edges := 512 + 1024 * TONE_GOLDEN(k);   -- 8 * (64 + 128*tone)
+      if abs(sym_edges(k) - exp_edges) > 2 then
+        report "FAIL: symbol " & integer'image(k) & " rising edges "
+               & integer'image(sym_edges(k)) & ", golden tone "
+               & integer'image(TONE_GOLDEN(k)) & " expects "
+               & integer'image(exp_edges) & " (+-2)" severity error;
+        fails <= fails + 1;
+      end if;
+    end loop;
+    if fails = 0 then
+      report "tb_wspr_top: all 162 symbol tone classes match TONE_GOLDEN";
     end if;
 
     -- 6: rf OFF after the TX

@@ -7,9 +7,9 @@
 --   PmodGPS UART --> gps_uart --> gps_parser --> gps_time --+
 --   PmodGPS 1PPS --> pps_measure --> clock_calibration -----+--> wspr_scheduler
 --                                                                    |
---   wspr_message -> wspr_fec -> wspr_interleave -> wspr_symbols --(mux)---> wspr_modulator --> rf_out
---                                                 (162-tone constant)   ^
---                                                  scheduler.symbol_index
+--   wspr_message -> wspr_fec -> wspr_interleave -> wspr_symbols --> wspr_modulator --> rf_out
+--                                     (162-tone constant; the modulator
+--                                      indexes this vector itself)
 --
 -- Signal flow:
 --   * GPS NMEA bytes arrive on uart_rx, are framed by gps_uart, parsed to
@@ -24,8 +24,8 @@
 --     wspr_symbols) folds to a constant 162-tone vector for the configured
 --     message (default bench message "K1ABC FN42 37" -- SIMULATION/BENCH USE
 --     ONLY, never radiated; real operation requires the operator's own
---     callsign, plan section 25).  A combinational mux selects the tone for
---     the scheduler's symbol_index and feeds the modulator's 2-bit input.
+--     callsign, plan section 25).  The modulator owns the symbol counter and
+--     indexes this vector itself (no external mux -- review finding M1).
 --   * wspr_scheduler fires the TX at second = 1 of an even UTC minute
 --     (spec section 7: +1.000 s) when the slot_mask selects the slot; the
 --     modulator emits the continuous-phase 4-FSK carrier on rf_out.
@@ -39,7 +39,8 @@
 -- LED semantics (plan section 32 diagnostics):
 --   led1 : heartbeat -- blinks ~1 Hz from the 12 MHz clock (board alive)
 --   led2 : '0' (lit) while the beacon is ready to transmit (UTC valid AND
---          calibration frozen valid); '1' (dark) otherwise.
+--          calibration valid); '1' (dark) during recalibration or on a
+--          calibration error.
 --
 -- RF note (documented physical property, docs/protocol.md section 8): with a
 -- 12 MHz-sampled 1-bit output the default 10.1402 MHz carrier folds (Nyquist);
@@ -64,7 +65,15 @@ entity top is
     CAL_MAX_HZ          : natural  := 12012000;
     SYMBOLS_PER_TX      : positive := 162;
     CARRIER_INCREMENT   : std_logic_vector(39 downto 0) := x"D8530323E9";
-    HALF_TONE_INCREMENT : natural := 67109
+    -- Exact half of the rounded tone-spacing increment (12000/8192 Hz);
+    -- 2*67109 = 134218 differs from the single-step increment 134217 by
+    -- +1 LSB ~ 1.1e-5 Hz -- derivation in the wspr_modulator.vhd header and
+    -- tools/calculate_nco.py (review finding S4).
+    HALF_TONE_INCREMENT : natural := 67109;
+    -- NCO phase-accumulator width.  Pass-through so testbenches can scale
+    -- parameters without changing the functional logic (plan section 21);
+    -- the synthesis default is 40 bits (spec section 9).
+    ACCUMULATOR_BITS    : positive := 40
   );
   port (
     clk     : in  std_logic;
@@ -101,8 +110,8 @@ architecture rtl of top is
   -- suggests reducing the duty cycle later (plan section 35).
   constant SLOT_MASK_C : std_logic_vector(0 to 29) := (others => '1');
 
-  -- Heartbeat divider: toggle every HEARTBEAT_DIV2 cycles (6,000,000 at
-  -- 12 MHz -> 1 Hz toggle, 0.5 Hz full blink).  Generic for TB scaling.
+  -- Heartbeat divider: hb toggles every HEARTBEAT_DIV2 cycles (6,000,000 at
+  -- 12 MHz = 0.5 s), so led1 has period 1 s (0.5 s high, 0.5 s low).
   constant HEARTBEAT_DIV2 : positive := 6000000;
 
   -- gps_uart -> gps_parser
@@ -133,7 +142,6 @@ architecture rtl of top is
   -- scheduler -> modulator (and mux)
   signal tx_enable   : std_logic;
   signal symbol_tick : std_logic;
-  signal sym_idx     : natural range 0 to SYMBOLS_PER_TX - 1;
   signal tx_active   : std_logic;
   -- codec chain
   signal payload     : std_logic_vector(0 to 49);
@@ -141,8 +149,6 @@ architecture rtl of top is
   signal interleaved : std_logic_vector(0 to 161);
   signal sync_bits   : std_logic_vector(0 to 161);
   signal tones       : std_logic_vector(0 to 323);
-  -- mux -> modulator
-  signal tone_sel    : std_logic_vector(1 downto 0);
   -- diagnostics
   signal hb_cnt      : natural range 0 to HEARTBEAT_DIV2 - 1 := 0;
   signal hb          : std_logic := '0';
@@ -191,6 +197,11 @@ begin
               measured_cycles_per_second => measured,
               measurement_valid => meas_valid);
 
+  -- v1 note (review finding S6): cal_hz is validated and frozen here, but
+  -- the modulator's phase increments are BUILD-TIME generics (spec section
+  -- 9) -- the calibrated-clock -> increment datapath is not yet wired.
+  -- Calibration still gates transmission (scheduler: no valid calibration
+  -- -> no TX, plan section 31).
   u_cal : entity work.clock_calibration
     generic map (COUNT_WIDTH => 25, CALIBRATION_SECONDS => CALIBRATION_SECONDS,
                  CAL_MIN_HZ => CAL_MIN_HZ, CAL_MAX_HZ => CAL_MAX_HZ)
@@ -242,20 +253,20 @@ begin
               minute => utc_minute, cal_valid => cal_valid,
               cal_error => cal_error, cal_start => cal_start,
               tx_enable => tx_enable, symbol_tick => symbol_tick,
-              tx_active => tx_active, symbol_index => sym_idx,
+              tx_active => tx_active, symbol_index => open,
               state_o => open);
 
-  -- Tone mux: the scheduler's symbol index selects one 2-bit channel symbol
-  -- from the codec's constant tone vector (tones(2i)=sync, tones(2i+1)=data,
-  -- tone value = 2*data + sync -- spec section 5).
-  tone_sel <= tones(2 * sym_idx + 1) & tones(2 * sym_idx);
-
+  -- The modulator owns the symbol counter and indexes `tones` itself (no
+  -- external mux: a scheduler-driven index skewed the sequence by one symbol
+  -- -- pedagogical review finding M1).  The scheduler's symbol_index output
+  -- is diagnostics-only.
   u_mod : entity work.wspr_modulator
     generic map (CLOCK_HZ => CLOCK_HZ, CARRIER_INCREMENT => CARRIER_INCREMENT,
                  HALF_TONE_INCREMENT => HALF_TONE_INCREMENT,
-                 SYMBOLS_PER_TX => SYMBOLS_PER_TX, ACCUMULATOR_BITS => 40)
+                 SYMBOLS_PER_TX => SYMBOLS_PER_TX,
+                 ACCUMULATOR_BITS => ACCUMULATOR_BITS)
     port map (clk => clk, rst => rst, tx_start => tx_enable,
-              symbol_index => tone_sel, rf_out => rf_out,
+              tones => tones, rf_out => rf_out,
               tx_active => tx_active, symbol_tick => symbol_tick);
 
   ---------------------------------------------------------------------------
@@ -273,9 +284,13 @@ begin
     end if;
   end process heartbeat;
 
-  -- Ready = UTC valid AND calibration frozen valid (scheduler gates the same
-  -- way before firing).  LED2 is active-low: lit while ready.
-  ready  <= utc_valid and cal_frozen;
+  -- Ready = UTC valid AND calibration currently valid.  cal_valid is cleared
+  -- at the start of every recalibration window and stays low on an
+  -- out-of-bounds result, so led2 goes dark during recalibration AND on a
+  -- calibration error (cal_frozen alone would stay high on an error --
+  -- clock_calibration sets frozen and error together; review finding M5).
+  -- The scheduler gates transmission on the same condition before firing.
+  ready  <= utc_valid and cal_valid;
   led2_r <= not ready;
 
   led1 <= hb;      -- active-low LED driven by the heartbeat toggle

@@ -40,9 +40,11 @@ tools/         Helper scripts (NCO constant calculation, WSPR inspection)
 docs/          Architecture, protocol, GPS, RF, verification, lab notes, environment
 ```
 
-The layout follows the plan's "Recommended Repository Structure" (§27) exactly. Many files are
-currently empty placeholders pending implementation in later phases — see `docs/environment.md`
-§5 for the setup status.
+The layout follows the plan's "Recommended Repository Structure" (§27) exactly. The repository is
+fully implemented through integration (Phases 0–5 plus the pedagogical review): all RTL blocks have
+committed testbenches, `make sim` runs 13/13 passing, `make` produces `build/top.bin`. Genuinely
+empty placeholders that remain: `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`,
+`docs/rf.md`, `docs/verification.md`, `docs/lab.md` (status in `docs/architecture.md` §12).
 
 ## Building (after Phase 1)
 

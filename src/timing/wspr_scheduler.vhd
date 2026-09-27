@@ -135,14 +135,15 @@ begin
             -- fresh rising edge in CALIBRATE does.
 
           when TX =>
-            if utc_valid = '0' then
-              -- GPS lost mid-TX: finish the transmission in progress but do
-              -- not start a new one (plan section 31: do not START a new TX;
-              -- an RF cut mid-symbol would harm the decode more than the
-              -- missing second matters).  Documented decision; revisit in
-              -- docs/protocol.md if field tests disagree.
-              null;
-            end if;
+            -- GPS lost mid-TX: finish the transmission in progress but do
+            -- not start a new one (plan section 31: do not START a new TX;
+            -- an RF cut mid-symbol would harm the decode more than the
+            -- missing second matters).  Deliberately NO assignment here --
+            -- the modulator keeps counting symbol_tick, and blocking the
+            -- NEXT start happens where tx_enable is produced (review
+            -- finding S3: the former `if utc_valid='0' then null` hid this
+            -- decision in a no-op).  Revisit docs/protocol.md if field
+            -- tests disagree.
             if symbol_tick = '1' then
               if sym_cnt = SYMBOLS_PER_TX - 1 then
                 state <= TX_DONE;       -- last symbol just ended

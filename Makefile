@@ -76,8 +76,7 @@ RTL_SIM_DEPS := \
 	src/wspr/wspr_symbols.vhd \
 	src/wspr/wspr_modulator.vhd
 
-# Testbench suite.  tb_wspr_top is guarded by a file-existence check in the
-# `sim` recipe because it is authored separately and may not exist yet.
+# Testbench suite (review finding M3: tb_wspr_scheduler was missing here).
 SIM_TBS := \
 	tb_wspr_top \
 	tb_gps_uart \
@@ -90,7 +89,8 @@ SIM_TBS := \
 	tb_wspr_fec \
 	tb_wspr_interleave \
 	tb_wspr_symbols \
-	tb_wspr_modulator
+	tb_wspr_modulator \
+	tb_wspr_scheduler
 
 # `make` with no target builds the bitstream (orchestrator plan section 30-A).
 .DEFAULT_GOAL := all
