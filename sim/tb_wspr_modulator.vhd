@@ -57,14 +57,16 @@ architecture sim of tb_wspr_modulator is
 
   -- Run A/B generics (40-bit, real increments from tools/calculate_nco.py)
   constant CARRIER_INC : std_logic_vector(39 downto 0) := x"D8530323E9";
-  constant TONE_INC    : natural := 134217;
+  constant HALF_TONE_INC : natural := 67109;
 
-  -- Run C: index 0 -> inc 256 (alpha 0.25, sample pattern period 4);
-  --        index 3 -> inc 448 (alpha 0.4375, sample pattern period 16).
+  -- Run C (centered grid: inc(k) = 256 + (2k-3)*64):
+  --        index 0 -> inc 64   (alpha 0.0625, pattern period 16, 1 rising
+  --                             edge per period -> 512 transitions/symbol)
+  --        index 3 -> inc 448  (alpha 0.4375, period 16, 7 per 16 -> 3584)
   constant CARRIER_INC_C : std_logic_vector(39 downto 0) :=
     std_logic_vector(to_unsigned(256, 40));
-  constant TONE_INC_C    : natural := 64;
-  constant EXPECT_C_IDX0 : integer := 2048;  -- rising transitions / symbol
+  constant HALF_TONE_INC_C : natural := 64;
+  constant EXPECT_C_IDX0 : integer := 512;   -- rising transitions / symbol
   constant EXPECT_C_IDX3 : integer := 3584;
 
   constant C_HOLD_LEN : integer := (8192 - 3000) + 2*8192 + 100;
@@ -96,7 +98,8 @@ begin
   ---------------------------------------------------------------------------
   dut_a : entity work.wspr_modulator
     generic map (CLOCK_HZ => 12000, CARRIER_INCREMENT => CARRIER_INC,
-                 TONE_INCREMENT => TONE_INC, SYMBOLS_PER_TX => NUM_SYMS,
+                 HALF_TONE_INCREMENT => HALF_TONE_INC,
+                 SYMBOLS_PER_TX => NUM_SYMS,
                  ACCUMULATOR_BITS => 40)
     port map (clk => a_clk, rst => a_rst, tx_start => a_start,
               symbol_index => a_idx, rf_out => a_rf, tx_active => a_act,
@@ -196,7 +199,8 @@ begin
   ---------------------------------------------------------------------------
   dut_b : entity work.wspr_modulator
     generic map (CLOCK_HZ => 12001, CARRIER_INCREMENT => CARRIER_INC,
-                 TONE_INCREMENT => TONE_INC, SYMBOLS_PER_TX => NUM_SYMS,
+                 HALF_TONE_INCREMENT => HALF_TONE_INC,
+                 SYMBOLS_PER_TX => NUM_SYMS,
                  ACCUMULATOR_BITS => 40)
     port map (clk => b_clk, rst => b_rst, tx_start => b_start,
               symbol_index => b_idx, rf_out => b_rf, tx_active => b_act,
@@ -265,7 +269,7 @@ begin
   ---------------------------------------------------------------------------
   dut_c : entity work.wspr_modulator
     generic map (CLOCK_HZ => 12000, CARRIER_INCREMENT => CARRIER_INC_C,
-                 TONE_INCREMENT => TONE_INC_C, SYMBOLS_PER_TX => NUM_SYMS,
+                 HALF_TONE_INCREMENT => HALF_TONE_INC_C, SYMBOLS_PER_TX => NUM_SYMS,
                  ACCUMULATOR_BITS => 10)
     port map (clk => c_clk, rst => c_rst, tx_start => c_start,
               symbol_index => c_idx, rf_out => c_rf, tx_active => c_act,

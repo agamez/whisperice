@@ -8,11 +8,18 @@
 -- transmission, so the carrier phase evolves continuously across symbol
 -- boundaries.  The per-clock phase increment is
 --
---     phase_increment = CARRIER_INCREMENT + TONE_INCREMENT * symbol
+--     phase_increment = CARRIER_INCREMENT + (2*symbol - 3) * HALF_TONE_INCREMENT
 --
--- with symbol in 0..3, which realises tone_symbol = carrier + symbol * spacing
--- (spec section 6: spacing = 12000/8192 Hz).  The accumulator is only cleared
--- when a transmission STARTS (RF is off before and after), never mid-TX.
+-- with symbol in 0..3.  This realises the CENTERED tone grid of spec section 6
+-- (and WSJT-X wsprsimf.f90: (itone-1.5)*baud): the four tones sit at
+-- CARRIER + (-1.5, -0.5, +0.5, +1.5) * tone_spacing, i.e. CARRIER_INCREMENT is
+-- the grid CENTRE.  (An earlier tone0-based mapping emitted the whole grid
+-- 1.5 spacings high; fixed after documentation review.)  HALF_TONE_INCREMENT
+-- is the half-spacing increment: 67109 (tools/calculate_nco.py,
+-- exact half-spacing rounding at 12 MHz); adjacent tones are then 2*67109
+-- increments apart (+1 LSB = +1.1e-5 Hz against the rounded spacing --
+-- irrelevant against the 1.46 Hz tone spacing).  The accumulator is only cleared when a
+-- transmission STARTS (RF is off before and after), never mid-TX.
 --
 -- Symbol timing (plan section 10): one WSPR symbol lasts 8192/12000 s
 -- (spec section 6).  At CLOCK_HZ = 12,000,000 that is exactly 8,192,000 cycles.
@@ -52,8 +59,8 @@ use ieee.numeric_std.all;
 entity wspr_modulator is
   generic (
     CLOCK_HZ          : positive := 12000000;
-    CARRIER_INCREMENT : std_logic_vector(39 downto 0) := x"D8530323E9";
-    TONE_INCREMENT    : natural := 134217;
+    CARRIER_INCREMENT      : std_logic_vector(39 downto 0) := x"D8530323E9";
+    HALF_TONE_INCREMENT    : natural := 67109;
     SYMBOLS_PER_TX    : positive := 162;
     ACCUMULATOR_BITS  : positive := 40
   );
@@ -133,8 +140,12 @@ begin
       elsif active_r = '1' then
         -- Phase advance: carrier + tone offset of the latched symbol.
         -- unsigned addition wraps mod 2**ACCUMULATOR_BITS (phase wrap).
-        acc  <= acc + CARRIER_RESIZED
-                    + to_unsigned(TONE_INCREMENT * symbol_latched, ACCUMULATOR_BITS);
+        -- centered grid: (2*symbol - 3) half-steps, computed modulo 2**N
+        -- (the negative half-steps for symbols 0/1 wrap correctly)
+        acc  <= (acc + CARRIER_RESIZED
+                    + to_unsigned(HALF_TONE_INCREMENT * 2 * symbol_latched,
+                                  ACCUMULATOR_BITS))
+                    - to_unsigned(3 * HALF_TONE_INCREMENT, ACCUMULATOR_BITS);
         rf_r <= acc(ACCUMULATOR_BITS-1);
 
         -- Symbol timing: boundary when the in-symbol cycle counter expires.

@@ -22,7 +22,8 @@ so the increment for a wanted frequency is
 12 MHz`` (resolution ``12e6 / 2**40 ~ 1.0914e-5 Hz``).  Section 9 freezes the
 default RF carrier ``DEFAULT_RF_FREQUENCY_HZ = 10140200`` (30 m WSPR segment
 centre, DEFAULT-CONFIGURABLE).  WSPR tone spacing is ``12000/8192 =
-1.46484375 Hz`` (section 6); the four tone increments are carrier + k * spacing
+1.46484375 Hz`` (section 6); the four tone increments are carrier +
+(k - 1.5) * spacing (centered grid)
 for k = 0..3 (plan section 9).
 
 All arithmetic here is exact integer / rational (``fractions.Fraction``); the
@@ -138,9 +139,14 @@ def main() -> int:
     print(f"  RF carrier (default)  : {dec(carrier, args.decimals)} Hz")
     print(describe("carrier", carrier, clock, args.decimals))
     print()
-    print("  WSPR tones: carrier + k * spacing, k = 0..3")
+    print("  WSPR tones: carrier + (k - 1.5) * spacing, k = 0..3")
+    print("             (centered grid per docs/spec.md section 6: the")
+    print("              carrier is the grid CENTRE between tones 1 and 2)")
+    half = increment_for(TONE_SPACING_HZ / 2, clock)  # exact half-spacing inc
+    print(f"  half-spacing increment: {half}  (wspr_modulator.HALF_TONE_INCREMENT)")
+    print()
     for k in range(4):
-        freq = carrier + k * TONE_SPACING_HZ
+        freq = carrier + (2 * k - 3) * TONE_SPACING_HZ / 2
         print(describe(f"tone[{k}]", freq, clock, args.decimals))
 
     return 0
