@@ -12,10 +12,9 @@
 -- The NMEA sentence arrives with variable latency after the PPS edge it
 -- describes, so loads are applied IMMEDIATELY when strobed (the value then
 -- stands until the next PPS); the UART arrival time is never used to infer
--- timing.  After a load, utc_valid rises and stays high; it clears only on
--- reset (plan section 31: GPS losing fix invalidates further transmissions --
--- the scheduler also re-checks via the parser's fix_valid through the load
--- value; a 'V' status simply never loads).
+-- timing.  utc_valid rises on the first load and drops on fix_warning (a
+-- checksum-valid status-V NMEA sentence = fix lost) or reset -- the scheduler
+-- then stops transmitting until a valid fix returns (plan section 31).
 --
 -- minute_even flags a VALID time inside an even UTC minute (the WSPR slot
 -- minute).  It stays high for the whole minute; the scheduler fires TX at
