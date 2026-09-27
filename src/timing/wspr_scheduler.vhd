@@ -7,7 +7,7 @@
 --
 -- FSM (plan section 8):
 --
---     WAIT_GPS -> CALIBRATE -> READY -> WAIT_SLOT -> TX -> TX_DONE -> WAIT_SLOT
+--     WAIT_GPS -> CALIBRATE -> READY -> WAIT_SLOT -> TX -> TX_DONE -> CALIBRATE -> ...
 --
 --   WAIT_GPS  : no UTC yet -- NO TX (plan section 31).
 --   CALIBRATE : pulse cal_start; the calibration block (clock_calibration)
