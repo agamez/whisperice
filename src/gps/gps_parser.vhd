@@ -63,7 +63,12 @@ architecture rtl of gps_parser is
   signal field_idx     : natural range 0 to 15 := 0;
   signal char_in_field : natural range 0 to 15 := 0;
   signal addr3 : string(1 to 3) := "   ";  -- last 3 chars of the address field
-  signal time_digits : natural range 0 to 999999 := 0;
+  -- UTC digit-pair accumulators (field 2 = hh mm ss): kept tiny so the
+  -- commit path has no wide multiply/divide (integration P&R: the original
+  -- time_digits*10 mod 1000000 network capped the design at ~8 MHz).
+  signal p_hh : natural range 0 to 99 := 0;
+  signal p_mm : natural range 0 to 99 := 0;
+  signal p_ss : natural range 0 to 99 := 0;
   signal digit_cnt   : natural range 0 to 15 := 0;
   signal status_ok   : boolean := false;
   signal is_rmc      : boolean := false;
@@ -120,6 +125,9 @@ begin
               status_ok     <= false;
               is_rmc        <= false;
               addr3         <= "   ";
+              p_hh          <= 0;
+              p_mm          <= 0;
+              p_ss          <= 0;
             end if;                        -- ignore bytes between sentences
 
           when ST_BODY =>
@@ -146,12 +154,21 @@ begin
                               and (ch = type_char(3));
                   end if;
                 end if;
-                -- field 2: time digits hhmmss (ignore any .ss fraction)
+                -- field 2: time digits hhmmss (ignore any .ss fraction).
+                -- Two digits per field, accumulated directly (see header
+                -- note above the p_hh/p_mm/p_ss declarations).
                 if field_idx = 1 and char_in_field <= 5 then
                   if ch >= '0' and ch <= '9' then
                     d := character'pos(ch) - character'pos('0');
-                    time_digits <= (time_digits * 10 + d) mod 1000000;
-                    digit_cnt   <= digit_cnt + 1;
+                    digit_cnt <= digit_cnt + 1;
+                    case char_in_field is
+                      when 0      => p_hh <= d * 10;
+                      when 1      => p_hh <= p_hh + d;
+                      when 2      => p_mm <= d * 10;
+                      when 3      => p_mm <= p_mm + d;
+                      when 4      => p_ss <= d * 10;
+                      when others => p_ss <= p_ss + d;
+                    end case;
                   end if;
                 end if;
                 -- field 3: status character ('A' = valid)
@@ -194,9 +211,9 @@ begin
                   and is_rmc
                   and (digit_cnt = 6);
             if ok then
-              hh := time_digits / 10000;
-              mm := (time_digits / 100) mod 100;
-              ss := time_digits mod 100;
+              hh := p_hh;
+              mm := p_mm;
+              ss := p_ss;
               if hh <= 23 and mm <= 59 and ss <= 59 then
                 if status_ok then
                   hour_r   <= hh;

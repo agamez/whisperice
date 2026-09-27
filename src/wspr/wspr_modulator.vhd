@@ -104,6 +104,20 @@ architecture rtl of wspr_modulator is
   constant CARRIER_RESIZED : unsigned(ACCUMULATOR_BITS-1 downto 0) :=
     resize(unsigned(CARRIER_INCREMENT), ACCUMULATOR_BITS);
 
+  -- Per-symbol increment constants for the centered grid (symbol k sits at
+  -- CARRIER + (2k-3) * HALF_TONE_INCREMENT).  Precomputing them keeps the
+  -- per-clock path a 4:1 mux plus ONE 40-bit add -- a symbolic multiply by
+  -- the 17-bit half-spacing constant would synthesize a ~130 ns combinational
+  -- multiplier and fail 12 MHz timing (found in integration P&R).
+  constant INC_T0 : unsigned(ACCUMULATOR_BITS-1 downto 0) :=
+    CARRIER_RESIZED - to_unsigned(3 * HALF_TONE_INCREMENT, ACCUMULATOR_BITS);
+  constant INC_T1 : unsigned(ACCUMULATOR_BITS-1 downto 0) :=
+    CARRIER_RESIZED - to_unsigned(HALF_TONE_INCREMENT, ACCUMULATOR_BITS);
+  constant INC_T2 : unsigned(ACCUMULATOR_BITS-1 downto 0) :=
+    CARRIER_RESIZED + to_unsigned(HALF_TONE_INCREMENT, ACCUMULATOR_BITS);
+  constant INC_T3 : unsigned(ACCUMULATOR_BITS-1 downto 0) :=
+    CARRIER_RESIZED + to_unsigned(3 * HALF_TONE_INCREMENT, ACCUMULATOR_BITS);
+
   -- 25-bit symbol-length/cycle counters: WHOLE_CYCLES < 2^25 for any clock
   -- below ~101 GHz; 8,192,068 (at 12.0001 MHz) needs 23 bits.
   constant LEN_BITS : positive := 25;
@@ -140,12 +154,15 @@ begin
       elsif active_r = '1' then
         -- Phase advance: carrier + tone offset of the latched symbol.
         -- unsigned addition wraps mod 2**ACCUMULATOR_BITS (phase wrap).
-        -- centered grid: (2*symbol - 3) half-steps, computed modulo 2**N
-        -- (the negative half-steps for symbols 0/1 wrap correctly)
-        acc  <= (acc + CARRIER_RESIZED
-                    + to_unsigned(HALF_TONE_INCREMENT * 2 * symbol_latched,
-                                  ACCUMULATOR_BITS))
-                    - to_unsigned(3 * HALF_TONE_INCREMENT, ACCUMULATOR_BITS);
+        -- centered grid: one 40-bit add of the selected per-symbol constant
+        -- (the four constants realize (2k-3) * HALF_TONE_INCREMENT modulo
+        -- 2**ACCUMULATOR_BITS; symbols 0/1 subtract via modular wrap)
+        case symbol_latched is
+          when 0      => acc <= acc + INC_T0;
+          when 1      => acc <= acc + INC_T1;
+          when 2      => acc <= acc + INC_T2;
+          when others => acc <= acc + INC_T3;
+        end case;
         rf_r <= acc(ACCUMULATOR_BITS-1);
 
         -- Symbol timing: boundary when the in-symbol cycle counter expires.
