@@ -1,22 +1,20 @@
-# constraints/icebreaker.pcf -- wspr-icebreaker pin constraints
+# iCEBreaker pin constraints (iCE40UP5K, SG48)
 #
-# Phase 1: only the 12 MHz clock and the two on-board user LEDs are assigned.
-# GPS (PMOD 1A) and RF (PMOD 1B) pins are added by later phases only; do not
-# invent pins (AGENTS.md section 2.4, orchestrator plan section 3.1).
-#
-# SOURCE OF TRUTH (docs/spec.md section 11):
-#   Official iCEBreaker example PCF,
-#   icebreaker-fpga/icebreaker-examples
-#     commit cb9e674cbf0facb84684b02567eb55df3018726b
-#     blob   d3097d5bfdf59d7229604ae287df4fb9677b492b
-#     file   icebreaker/icebreaker.pcf
-#
-# Signal names below match the top-level port names in src/top.vhd.
-#
-#   clk   -> pin 35   official PCF signal CLK    (12 MHz onboard oscillator)
-#   led1  -> pin 11   official PCF signal LEDR_N (on-board red   LED, active-low)
-#   led2  -> pin 37   official PCF signal LEDG_N (on-board green LED, active-low)
+# Source: official icebreaker example PCF
+#   icebreaker-fpga/icebreaker-examples @ cb9e674cbf0facb84684b02567eb55df3018726b
+#   (icebreaker/icebreaker.pcf, blob d3097d5b...) via docs/spec.md section 11.
+# NEVER invent pins -- every pin below traces to that commit.
 
-set_io clk  35
-set_io led1 11
-set_io led2 37
+# 12 MHz board oscillator
+set_io clk 35
+
+# LEDs (active-low)
+set_io led1 11    # LEDR_N
+set_io led2 37    # LEDG_N
+
+# PmodGPS on PMOD1A (docs/spec.md section 11: 3DF=4, RX=2, TX=47, 1PPS=45)
+set_io uart_rx 2  # FPGA UART RX <- PmodGPS TX
+set_io pps 45     # PmodGPS 1PPS (~100 ms pulse, edge-detected in RTL)
+
+# RF output (P1B10, proposed in docs/spec.md section 11)
+set_io rf_out 28
