@@ -1,0 +1,22 @@
+# wspr-icebreaker -- build artifacts and editor/OS droppings
+
+# Everything the build and simulation produce lives under build/.
+build/
+
+# GHDL library / object files (should only ever appear under build/ghdl/,
+# but ignore stray ones from ad-hoc ghdl runs in the repo root).
+work-obj93.cf
+work-obj*.cf
+*.cf
+*.o
+
+# Synthesis / P&R / bitstream outputs (*.json, *.asc, *.bin) are covered by the
+# `build/` rule above and must never be generated outside it.
+
+# Editor / OS droppings
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+.DS_Store
