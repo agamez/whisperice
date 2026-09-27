@@ -20,3 +20,5 @@ work-obj*.cf
 .vscode/
 .idea/
 .DS_Store
+/tb_[a-z]*
+/tb_*_neg
