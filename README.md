@@ -19,10 +19,10 @@ The complete open-source iCE40 flow plus a VHDL-93 simulator and WSPR reference 
 
 | Purpose | Tool |
 |---|---|
-| Synthesis | Yosys 0.52 |
-| Place & route | nextpnr-ice40 0.7 |
+| Synthesis | Yosys 0.69+154 with GHDL plugin (oss-cad-suite 2026-09-27) |
+| Place & route | nextpnr-ice40 0.11.1 |
 | Bitstream / programming | Project IceStorm (`icepack`, `iceprog`, `icetime`) |
-| Simulation | GHDL 5.0.1 (used strictly with `--std=93`) |
+| Simulation | GHDL 7.0.0-dev (used strictly with `--std=93`) |
 | Reference decoder | `wsprd` from WSJT-X 2.7.0 |
 | Reference model / tooling | Python 3.13 + numpy 2.2.4 |
 

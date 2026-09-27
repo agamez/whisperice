@@ -54,11 +54,11 @@ Toolchain (Debian 13, installed via apt, verified end-to-end on the UP5K):
 
 | Purpose | Tool | Invocation notes |
 |---|---|---|
-| Synthesis | Yosys 0.52 | `synth_ice40` emits **`-json`** (nextpnr 0.7 has no BLIF input) |
-| Place & route | nextpnr-ice40 0.7 | `--up5k --package sg48` |
+| Synthesis | Yosys 0.69+154 (oss-cad-suite 2026-09-27) | `yosys -m ghdl -p "ghdl --std=93 <files> -e <top>; synth_ice40 -top <top> -json <out>.json"` |
+| Place & route | nextpnr-ice40 0.11.1 | `--up5k --package sg48`, consumes `--json` |
 | Bitstream / timing | icepack / icetime | `icetime -d up5k` |
-| Programming | iceprog | board attaches as FT2232H `0403:6010`; udev rule installed; user in `plugdev` |
-| Simulation | GHDL 5.0.1 | always with `--std=93` |
+| Programming | iceprog | board attaches as FT2232H `0403:6010`; udev rule at `/etc/udev/rules.d/99-icebreaker.rules`; user in `plugdev` |
+| Simulation | GHDL 7.0.0-dev (oss-cad-suite) | always with `--std=93` |
 | Reference decoder | wsprd (WSJT-X 2.7.0) | `wsprd <file.wav\|file.c2>` |
 | Reference model / tools | Python 3.13 + numpy 2.2.4 | no extra pip packages installed |
 
@@ -126,8 +126,8 @@ review the same block.
 ## 6. Build / verify commands (verified working on this host)
 
 ```sh
-# Synthesis + P&R + bitstream (smoke-tested flow; real Makefile arrives in Phase 1)
-yosys -q -p "read_verilog top.v; synth_ice40 -top top -json top.json"        # .vhd via ghdl-yosys bridge or read_vhdl as set up in Phase 1
+# Synthesis + P&R + bitstream (VHDL-93, smoke-tested end-to-end; real Makefile arrives in Phase 1)
+yosys -m ghdl -p "ghdl --std=93 src/top.vhd -e top; synth_ice40 -top top -json top.json"
 nextpnr-ice40 --up5k --package sg48 --pcf constraints/icebreaker.pcf \
               --json top.json --asc top.asc --freq 12
 icepack top.asc top.bin
