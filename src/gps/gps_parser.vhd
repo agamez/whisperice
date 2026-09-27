@@ -187,9 +187,11 @@ begin
 
           when ST_COMMIT =>
             -- checksum compares against everything between $ and *
+            -- NOTE: status_ok is deliberately NOT part of ok -- a
+            -- checksum-valid RMC with status V must reach the warning path
+            -- (fix lost), not the rejection path (plan section 31).
             ok := (chk_hi * 16 + chk_lo = to_integer(unsigned(checksum)))
                   and is_rmc
-                  and status_ok
                   and (digit_cnt = 6);
             if ok then
               hh := time_digits / 10000;
