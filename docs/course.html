@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wspr-icebreaker — From Bits to Beams: a WSPR beacon course</title>
+<style>
+  :root{
+    --ink:#1c2330; --paper:#fbfaf7; --accent:#0e7490; --accent2:#b45309;
+    --theory:#0e7490; --practice:#15803d; --story:#b45309; --warn:#b91c1c;
+    --code-bg:#0f172a; --code-ink:#e2e8f0; --line:#d6d3cd;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font:16px/1.55 "Source Serif 4",Georgia,"Times New Roman",serif}
+  .slide{display:none;min-height:100vh;padding:4.5vh 6vw 9vh;max-width:1180px;margin:0 auto}
+  .slide.active{display:block}
+  .kicker{font:600 .78rem/1 "Helvetica Neue",Arial,sans-serif;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:.9rem}
+  h1{font-size:2.5rem;line-height:1.12;margin:.2rem 0 1rem;font-weight:700}
+  h2{font-size:1.7rem;line-height:1.2;margin:.4rem 0 .8rem;color:#123}
+  h3{font-size:1.15rem;margin:1.2rem 0 .4rem;color:#0f2a3a}
+  p,li{max-width:62rem}
+  ul,ol{padding-left:1.4rem}
+  li{margin:.28rem 0}
+  a{color:var(--accent)}
+  code,kbd{font:.86em/1.5 "JetBrains Mono",Consolas,Menlo,monospace;
+    background:#efece5;border:1px solid var(--line);border-radius:4px;padding:.05em .35em}
+  pre.code{background:var(--code-bg);color:var(--code-ink);border-radius:10px;
+    padding:1rem 1.2rem;overflow-x:auto;font:.82rem/1.55 "JetBrains Mono",Consolas,monospace;
+    border:1px solid #27324a;max-width:64rem}
+  pre.code .c{color:#7dd3a0} pre.code .k{color:#93c5fd} pre.code .n{color:#fbbf24}
+  table{border-collapse:collapse;margin:1rem 0;font-size:.92rem;max-width:64rem}
+  th,td{border:1px solid var(--line);padding:.42rem .7rem;text-align:left;vertical-align:top}
+  th{background:#efece5;font-family:"Helvetica Neue",Arial,sans-serif;font-size:.8rem;
+    text-transform:uppercase;letter-spacing:.06em}
+  .box{border-left:4px solid var(--line);background:#f4f2ec;border-radius:0 8px 8px 0;
+    padding:.7rem 1rem;margin:1rem 0;max-width:62rem}
+  .box .tag{font:700 .72rem/1 "Helvetica Neue",Arial,sans-serif;letter-spacing:.1em;
+    text-transform:uppercase;display:block;margin-bottom:.35rem}
+  .theory{border-color:var(--theory)} .theory .tag{color:var(--theory)}
+  .practice{border-color:var(--practice)} .practice .tag{color:var(--practice)}
+  .story{border-color:var(--story)} .story .tag{color:var(--story)}
+  .warn{border-color:var(--warn);background:#faf0ef} .warn .tag{color:var(--warn)}
+  .cite{border-color:#8a8a83;background:#f1efe8} .cite .tag{color:#6b6b64}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:2.2rem;align-items:start}
+  @media (max-width:860px){.cols{grid-template-columns:1fr}}
+  figure{margin:1.2rem 0;max-width:64rem}
+  figure svg{width:100%;height:auto;background:#fff;border:1px solid var(--line);
+    border-radius:10px}
+  figcaption{font-size:.85rem;color:#5a5a52;margin-top:.4rem;font-style:italic}
+  .math{font-family:"STIX Two Math",Georgia,serif;font-size:1.06rem;
+    background:#eef4f6;border-radius:8px;padding:.55rem .9rem;margin:.7rem 0;
+    max-width:62rem;border:1px solid #d3e2e6}
+  details{border:1px solid var(--line);border-radius:8px;padding:.5rem .9rem;
+    margin:.7rem 0;max-width:62rem;background:#fff}
+  summary{cursor:pointer;font-weight:700;font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:.9rem}
+  .foot{position:fixed;left:0;right:0;bottom:0;display:flex;gap:1rem;align-items:center;
+    padding:.5rem 1.2rem;background:#fffdf8;border-top:1px solid var(--line);
+    font:.8rem "Helvetica Neue",Arial,sans-serif;color:#55554e;z-index:9}
+  .foot .sp{flex:1}
+  .foot button{font:600 .85rem "Helvetica Neue",Arial,sans-serif;padding:.4rem .9rem;
+    border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  .foot button:hover{border-color:var(--accent);color:var(--accent)}
+  #bar{position:fixed;top:0;left:0;height:4px;background:var(--accent);z-index:10;width:0}
+  .big{font-size:1.25rem}
+  .mono{font-family:"JetBrains Mono",Consolas,monospace;font-size:.9em}
+  .toc{columns:2;gap:3rem} .toc li{margin:.35rem 0}
+  @media print{
+    .foot,#bar{display:none}
+    .slide{display:block !important;page-break-after:always;min-height:auto;padding:1.5cm 1.5cm}
+  }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+
+<!-- ======================= 1 · TITLE ======================= -->
+<section class="slide active">
+  <div class="kicker">wspr-icebreaker · a course</div>
+  <h1>From Bits to Beams</h1>
+  <p class="big">The theory and practice of a <strong>protocol-compliant WSPR beacon</strong>
+  built from scratch in VHDL-93 on a $50 FPGA board — no CPU, no PC, one GPIO pin.</p>
+  <p>Everything in this course is grounded in the repository you are holding:
+  every constant is cited to the pinned WSJT-X 2.7.0 source, every block has a passing
+  testbench, and the acceptance criterion is <em>a standard decoder decoding a real
+  transmission</em>.</p>
+  <div class="cols">
+    <div>
+      <h3>What you will learn</h3>
+      <ul>
+        <li>Sampling, aliasing and <em>ghost images</em> — and why our carrier “folds”</li>
+        <li>Direct digital synthesis: the phase accumulator behind every NCO</li>
+        <li>Communication theory: FSK, matched filtering, link budgets at −31 dB SNR</li>
+        <li>The WSPR protocol bit-for-bit: packing, FEC, interleaving, sync, decoding</li>
+        <li>FPGA practice: VHDL-93, testbenches, timing, and honest verification</li>
+        <li>RF practice: filters, image selection, and the transmit chain</li>
+      </ul>
+    </div>
+    <div>
+      <h3>How to use this deck</h3>
+      <ul>
+        <li><kbd>→</kbd> / <kbd>←</kbd> (or <kbd>Space</kbd>) to navigate; <kbd>Home</kbd>/<kbd>End</kbd> to jump</li>
+        <li>Green boxes = <em>practice</em> — run it yourself; blue = theory; amber = war stories from this repo's real bugs</li>
+        <li>Links to <code>src/…</code> open the actual RTL; Wikipedia links open background reading</li>
+        <li>Print it: every slide becomes a page (<kbd>Ctrl</kbd>+<kbd>P</kbd>)</li>
+      </ul>
+      <div class="box cite"><span class="tag">Ground rule</span>
+      No number in this course is from memory. Protocol constants cite the pinned
+      WSJT-X 2.7.0 source (<code>docs/spec.md</code>, <code>docs/protocol.md</code>);
+      measurements are labelled; unknowns are marked PENDING-HARDWARE.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 2 · TOC ======================= -->
+<section class="slide">
+  <div class="kicker">Course map</div>
+  <h2>Ten parts, bottom-up</h2>
+  <ol class="toc">
+    <li><a href="#p0">Part 0 — Orientation: the project and its rules</a></li>
+    <li><a href="#p1">Part 1 — Signals, sampling and ghost images</a></li>
+    <li><a href="#p2">Part 2 — Direct digital synthesis: the NCO</a></li>
+    <li><a href="#p3">Part 3 — Communication theory for weak signals</a></li>
+    <li><a href="#p4">Part 4 — The WSPR protocol, bit for bit</a></li>
+    <li><a href="#p5">Part 5 — The beacon architecture (GPS → scheduler)</a></li>
+    <li><a href="#p6">Part 6 — The modulator: continuous-phase 4-FSK in silicon</a></li>
+    <li><a href="#p7">Part 7 — The RF chain: filters, images, levels</a></li>
+    <li><a href="#p8">Part 8 — Verification: goldens, adversaries, honesty</a></li>
+    <li><a href="#p9">Part 9 — VHDL &amp; FPGA primer, laboratories</a></li>
+    <li><a href="#p10">Part 10 — References and where to go next</a></li>
+  </ol>
+  <div class="box theory"><span class="tag">Prerequisites</span>
+  Comfort with basic trigonometry and complex numbers; curiosity. VHDL and RF theory are
+  taught from zero in parts 7 and 9. No ham licence needed for any lab — everything
+  happens in simulation or into a dummy load.</div>
+</section>
+
+<!-- ======================= PART 0 ======================= -->
+<section class="slide" id="p0">
+  <div class="kicker">Part 0 · Orientation</div>
+  <h2>The project in one slide</h2>
+  <p>An <strong>autonomous, protocol-compliant WSPR beacon</strong>: an iCEBreaker FPGA board
+  (Lattice iCE40UP5K) plus a PmodGPS module. The FPGA reads UTC from GPS, calibrates its
+  12 MHz oscillator against the GPS 1PPS, and radiates a continuous-phase 4-FSK carrier from a
+  single GPIO pin — entirely in synthesized logic. <strong>No softcore CPU. No PC at transmit
+  time. No DAC.</strong></p>
+  <figure>
+  <svg viewBox="0 0 980 240" role="img" aria-label="system block diagram">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+    <rect x="10" y="20" width="150" height="60" rx="10" fill="#e0f2fe" stroke="#0e7490"/>
+    <text x="85" y="46" text-anchor="middle" font-size="14" font-weight="bold">PmodGPS</text>
+    <text x="85" y="64" text-anchor="middle" font-size="11">NMEA 9600 8N1 · 1PPS</text>
+    <rect x="230" y="8" width="120" height="38" rx="8" fill="#fff" stroke="#334155"/>
+    <text x="290" y="32" text-anchor="middle" font-size="12">gps_uart</text>
+    <rect x="230" y="56" width="120" height="38" rx="8" fill="#fff" stroke="#334155"/>
+    <text x="290" y="80" text-anchor="middle" font-size="12">gps_parser</text>
+    <rect x="230" y="104" width="120" height="38" rx="8" fill="#fff" stroke="#334155"/>
+    <text x="290" y="128" text-anchor="middle" font-size="12">pps_measure</text>
+    <rect x="420" y="56" width="130" height="38" rx="8" fill="#fff" stroke="#334155"/>
+    <text x="485" y="80" text-anchor="middle" font-size="12">gps_time (UTC)</text>
+    <rect x="420" y="104" width="130" height="38" rx="8" fill="#fff" stroke="#334155"/>
+    <text x="485" y="128" text-anchor="middle" font-size="12">clock_calibration</text>
+    <rect x="620" y="56" width="150" height="60" rx="10" fill="#fff" stroke="#334155"/>
+    <text x="695" y="80" text-anchor="middle" font-size="12" font-weight="bold">wspr_scheduler</text>
+    <text x="695" y="98" text-anchor="middle" font-size="10">even minute · second=1 · cal ok</text>
+    <rect x="230" y="170" width="120" height="34" rx="8" fill="#fff" stroke="#334155"/>
+    <text x="290" y="192" text-anchor="middle" font-size="11">wspr_message → fec → interleave → sync</text>
+    <rect x="620" y="170" width="150" height="38" rx="8" fill="#fff" stroke="#334155"/>
+    <text x="695" y="194" text-anchor="middle" font-size="12">wspr_modulator</text>
+    <rect x="850" y="170" width="110" height="38" rx="8" fill="#fef9c3" stroke="#b45309"/>
+    <text x="905" y="194" text-anchor="middle" font-size="12" font-weight="bold">rf_out pin</text>
+    <line x1="160" y1="50" x2="228" y2="28" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="160" y1="62" x2="228" y2="72" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="160" y1="72" x2="228" y2="122" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="350" y1="27" x2="418" y2="70" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="350" y1="75" x2="418" y2="75" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="350" y1="123" x2="418" y2="125" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="550" y1="75" x2="618" y2="80" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="550" y1="123" x2="618" y2="100" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="350" y1="187" x2="618" y2="189" stroke="#334155" marker-end="url(#ar)"/>
+    <line x1="695" y1="116" x2="695" y2="168" stroke="#334155" marker-end="url(#ar)"/>
+    <text x="712" y="146" font-size="10" fill="#475569">tx_enable</text>
+    <line x1="770" y1="189" x2="848" y2="189" stroke="#334155" marker-end="url(#ar)"/>
+    <text x="505" y="215" text-anchor="middle" font-size="10" fill="#64748b">all inside one iCE40UP5K — VHDL-93, 12 MHz single clock domain</text>
+  </svg>
+  <figcaption>The whole beacon. Detail per block in parts 5–7; contracts in
+  <a href="../docs/architecture.md">docs/architecture.md</a>.</figcaption>
+  </figure>
+  <div class="box story"><span class="tag">Why this design is strict</span>
+  “A signal that looks like WSPR” is a <em>failure</em>. Success is a standard decoder
+  (<code>wsprd</code>, WSJT-X 2.7.0) decoding a real transmission and a spot on
+  <a href="https://wsprnet.org">wsprnet.org</a> (plan §26, §38). Every deviation from the
+  protocol is a bug by definition.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 0 · Orientation</div>
+  <h2>The repository as a textbook</h2>
+  <div class="cols">
+    <div>
+      <h3>Read the artifacts in this order</h3>
+      <ol>
+        <li><a href="../docs/spec.md">docs/spec.md</a> — frozen constants contract</li>
+        <li><a href="../docs/architecture.md">docs/architecture.md</a> — block contracts</li>
+        <li><a href="../docs/protocol.md">docs/protocol.md</a> — WSPR constants + citations</li>
+        <li><a href="../src/top.vhd">src/top.vhd</a> — integration, read top-down</li>
+        <li>Any block, e.g. <a href="../src/nco/nco.vhd">src/nco/nco.vhd</a> — header first</li>
+        <li><a href="../sim/tb_wspr_symbols.vhd">sim/tb_*.vhd</a> — one TB per block</li>
+        <li><a href="../docs/verification.md">docs/verification.md</a> — the evidence</li>
+      </ol>
+    </div>
+    <div>
+      <h3>The tools you will run</h3>
+      <pre class="code">make sim          <span class="c"># 13/13 testbenches (GHDL, --std=93)</span>
+make              <span class="c"># yosys → nextpnr → icepack → icetime</span>
+icetime -d up5k build/top.asc   <span class="c"># timing: 31 MHz vs 12 needed</span>
+
+<span class="c"># reference model + goldens</span>
+python3 reference/wspr_reference.py --self-test
+python3 tools/calculate_nco.py --frequency 10140200
+python3 tools/check_tone_order.py     <span class="c"># folding: tone-order proof</span>
+python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd</span></pre>
+      <div class="box practice"><span class="tag">Practice 0.1</span>
+      Run <code>make sim</code> now. Expect 13 <code>PASS</code> lines. Then open
+      <a href="../sim/tb_wspr_symbols.vhd">tb_wspr_symbols.vhd</a> and find where it compares
+      against the golden vector — you are looking at the project's definition of “correct”.</div>
+    </div>
+  </div>
+  <div class="box theory"><span class="tag">The three laws of this repo</span>
+  (1) VHDL-93 only, <code>--std=93</code> everywhere. (2) No protocol approximations — constants
+  come from cited, pinned sources. (3) A block isn't done without RTL + testbench + documentation
+  (plan §28). We will see why each law earns its keep.</div>
+</section>
+
+<!-- ======================= PART 1 ======================= -->
+<section class="slide" id="p1">
+  <div class="kicker">Part 1 · Signals &amp; sampling</div>
+  <h2>Everything is a voltage that wiggles</h2>
+  <p>A carrier of frequency <span class="mono">f</span> hertz is
+  <span class="mono">A·sin(2πft + φ)</span>. Two of the three numbers — amplitude, frequency,
+  phase — carry information in this course: WSPR encodes data in <em>frequency</em> (4-FSK) while
+  keeping <em>phase continuous</em>. Amplitude is what the noise attacks.</p>
+  <div class="cols">
+    <div>
+      <h3>The dB toolkit (memorize three)</h3>
+      <table>
+        <tr><th>Quantity</th><th>Rule</th><th>Hand value</th></tr>
+        <tr><td>power ratio</td><td>10·log₁₀(P₁/P₂)</td><td>×2 = +3 dB, ×10 = +10 dB</td></tr>
+        <tr><td>absolute power</td><td>dBm = 10·log₁₀(P/1 mW)</td><td>0 dBm = 1 mW; 37 dBm = 5 W</td></tr>
+        <tr><td>thermal noise</td><td>−174 dBm/Hz at 290 K</td><td>2.5 kHz ⇒ −140 dBm</td></tr>
+      </table>
+      <p>The −174 dBm/Hz floor (<a href="https://en.wikipedia.org/wiki/Johnson%E2%80%93Nyquist_noise">Johnson–Nyquist noise</a>)
+      is physics: kT. Every link budget in this course starts there.</p>
+    </div>
+    <div>
+      <h3>Two views of one signal</h3>
+      <p><strong>Time view</strong>: an oscilloscope trace. <strong>Frequency view</strong>: a
+      spectrum — which pure sine waves, at which amplitudes, sum to the signal
+      (<a href="https://en.wikipedia.org/wiki/Fourier_analysis">Fourier analysis</a>).</p>
+      <p>WSPR lives in the frequency view: four tones 1.46484375 Hz apart, held 0.6827 s each.
+      A receiver's waterfall <em>is</em> a running Fourier view — that is why the course keeps
+      switching between the two.</p>
+      <div class="box theory"><span class="tag">Book</span>
+      Oppenheim &amp; Willsky, <em>Signals and Systems</em>, ch. 3 (Fourier series) —
+      the one chapter worth doing the problem sets for.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 1 · Signals &amp; sampling</div>
+  <h2>Sampling: the theorem that sets our ceiling</h2>
+  <p>A continuous signal sampled every <span class="mono">T = 1/f<sub>s</sub></span> seconds keeps
+  its identity only if</p>
+  <div class="math">f<sub>signal</sub> &lt; f<sub>s</sub>/2 &nbsp;&nbsp;(the Nyquist frequency)</div>
+  <p>— the <a href="https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem">Nyquist–Shannon
+  sampling theorem</a>. Our GPIO pin is sampled by the 12 MHz clock, so
+  <strong>nothing above 6 MHz can be represented directly</strong>. That single sentence
+  determines our first test bands (part 7).</p>
+  <figure>
+  <svg viewBox="0 0 900 250" role="img" aria-label="sampling and aliasing">
+    <line x1="40" y1="200" x2="870" y2="200" stroke="#334155"/>
+    <line x1="40" y1="20" x2="40" y2="200" stroke="#334155"/>
+    <text x="60" y="30" font-size="12" fill="#334155">x(t)</text>
+    <path d="M40,110 C90,20 140,20 190,110 S290,200 340,110 S440,20 490,110 S590,200 640,110 S740,20 790,110 L870,80" fill="none" stroke="#0e7490" stroke-width="2.5"/>
+    <g fill="#b91c1c">
+      <circle cx="60" cy="78" r="4"/><circle cx="90" cy="42" r="4"/><circle cx="120" cy="38" r="4"/>
+      <circle cx="150" cy="76" r="4"/><circle cx="180" cy="130" r="4"/><circle cx="210" cy="166" r="4"/>
+      <circle cx="240" cy="172" r="4"/><circle cx="270" cy="150" r="4"/><circle cx="300" cy="118" r="4"/>
+      <circle cx="330" cy="92" r="4"/><circle cx="360" cy="86" r="4"/><circle cx="390" cy="104" r="4"/>
+      <circle cx="420" cy="140" r="4"/><circle cx="450" cy="170" r="4"/><circle cx="480" cy="176" r="4"/>
+      <circle cx="510" cy="158" r="4"/><circle cx="540" cy="128" r="4"/><circle cx="570" cy="100" r="4"/>
+      <circle cx="600" cy="88" r="4"/><circle cx="630" cy="96" r="4"/><circle cx="660" cy="122" r="4"/>
+      <circle cx="690" cy="154" r="4"/><circle cx="720" cy="174" r="4"/><circle cx="750" cy="170" r="4"/>
+      <circle cx="780" cy="146" r="4"/><circle cx="810" cy="116" r="4"/><circle cx="840" cy="94" r="4"/>
+    </g>
+    <path d="M60,78 C110,30 160,30 210,140 S310,180 410,90 S510,30 610,88 S710,178 810,116 L870,94"
+          fill="none" stroke="#b91c1c" stroke-dasharray="6 5" stroke-width="2"/>
+    <text x="120" y="235" font-size="12" fill="#0e7490">true signal f &gt; f</text>
+    <text x="196" y="240" font-size="9" fill="#0e7490">s</text>
+    <text x="120" y="248" font-size="9" fill="#0e7490">/2</text>
+    <text x="470" y="235" font-size="12" fill="#b91c1c">alias “ghost” at |k·f_s − f|</text>
+    <text x="300" y="60" font-size="11" fill="#64748b">samples (red) cannot tell</text>
+    <text x="300" y="74" font-size="11" fill="#64748b">the two curves apart</text>
+  </svg>
+  <figcaption>Aliasing: after sampling, the blue and dashed-red signals are <em>the same
+  sequence</em>. The ghost is not an error you can fix later — the information is gone.</figcaption>
+  </figure>
+  <div class="box theory"><span class="tag">Ghost images, three costumes</span>
+  (1) <a href="https://en.wikipedia.org/wiki/Aliasing">Aliasing</a> — the sampled ghost above.
+  (2) The <a href="https://en.wikipedia.org/wiki/Image_frequency">image frequency</a> of a
+  superheterodyne receiver — a station at 2·f_IF away from the wanted one lands exactly on it.
+  (3) Analog-TV <a href="https://en.wikipedia.org/wiki/Ghosting_(television)">ghosts</a> — multipath
+  echoes, the time-domain cousin of spectral images. Our 1-bit DAC manufactures costume (1)
+  deliberately (part 2) and the RF filter must reject it (part 7).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 1 · Signals &amp; sampling</div>
+  <h2>The pin is a 1-bit DAC: the zero-order hold</h2>
+  <p>Our “transmitter output stage” is a logic pin: 0 V or 3.3 V, updated once per clock. In DSP
+  language that is a <strong>1-bit zero-order-hold (ZOH) DAC</strong>
+  (<a href="https://en.wikipedia.org/wiki/Zero-order_hold">ZOH</a>,
+  <a href="https://en.wikipedia.org/wiki/Quantization_(signal_processing)">quantization</a>):</p>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>The staircase changes <strong>at most every 83.3 ns</strong> (1/12 MHz) — any content
+        above 6 MHz can only exist as an <em>image</em>.</li>
+        <li>Each image at <span class="mono">m·f<sub>s</sub> ± f</span> is weighted by the ZOH
+        envelope <span class="mono">w(f) = |sinc(f/f<sub>s</sub>)|</span>
+        (<a href="https://en.wikipedia.org/wiki/Sinc_function">sinc function</a>).</li>
+        <li>A 1-bit quantizer also spreads <strong>broadband quantization noise</strong> across
+        the whole spectrum — the band-pass filter, not the DAC, sets the transmitted noise
+        floor.</li>
+      </ul>
+    </div>
+    <div>
+      <figure>
+      <svg viewBox="0 0 460 200" role="img" aria-label="zero order hold staircase">
+        <line x1="30" y1="170" x2="440" y2="170" stroke="#334155"/>
+        <line x1="30" y1="20" x2="30" y2="170" stroke="#334155"/>
+        <path d="M30,140 H60 V80 H90 V140 H120 V60 H150 V60 H180 V120 H210 V50 H240 V130 H270 V70 H300 V110 H330 V55 H360 V135 H390 V75 H420 V100 H440"
+              fill="none" stroke="#0e7490" stroke-width="2"/>
+        <path d="M30,100 C80,20 140,180 200,60 S300,160 360,50 S420,140 440,100"
+              fill="none" stroke="#b45309" stroke-dasharray="5 4" stroke-width="1.6"/>
+        <text x="60" y="190" font-size="11" fill="#475569">samples held 83.3 ns</text>
+        <text x="300" y="40" font-size="11" fill="#b45309">true waveform</text>
+        <text x="40" y="30" font-size="11" fill="#0e7490">ZOH staircase (what the pin does)</text>
+      </svg>
+      </figure>
+      <div class="box warn"><span class="tag">Consequence</span>
+      The pin cannot make a clean 10 MHz sine. It makes a <em>staircase whose spectrum contains
+      a 10 MHz image</em> — and it is the filter's job to pick that image out. This is not a
+      defect to fix in RTL; it is the architecture (plan §18).</div>
+    </div>
+  </div>
+  <div class="box theory"><span class="tag">Book</span>
+  Lyons, <em>Understanding Digital Signal Processing</em>, ch. 2 — sampling and aliasing
+  with the best pictures in print. Smith's free
+  <a href="https://www.dspguide.com/ch3.htm"><em>Guide to DSP</em>, ch. 3</a> covers the same
+  ground with less math.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 1 · Signals &amp; sampling</div>
+  <h2>Where our numbers come from</h2>
+  <table>
+    <tr><th>Quantity</th><th>Value</th><th>Where it comes from</th></tr>
+    <tr><td>Sample (clock) rate</td><td>12 MHz</td><td>iCEBreaker oscillator; measured against GPS 1PPS before every TX (part 5)</td></tr>
+    <tr><td>Nyquist ceiling</td><td>6 MHz</td><td>f<sub>s</sub>/2 — the sampling theorem</td></tr>
+    <tr><td>Carrier resolution</td><td>1.0914 × 10⁻⁵ Hz</td><td>f<sub>s</sub>/2⁴⁰ (40-bit phase accumulator, part 2)</td></tr>
+    <tr><td>Tone spacing</td><td>1.46484375 Hz</td><td>12000/8192 — chosen <em>by the protocol</em>, see part 4</td></tr>
+    <tr><td>Symbol duration</td><td>0.6827 s</td><td>8192/12000 — 8192 samples exactly</td></tr>
+    <tr><td>Message duration</td><td>110.592 s</td><td>162 × 0.6827 s</td></tr>
+  </table>
+  <div class="box practice"><span class="tag">Practice 1.1</span>
+  <code>python3 tools/check_tone_order.py</code> builds a real 1-bit staircase from the actual
+  40-bit increments and measures its spectrum. It proves — not argues — the claims of part 2's
+  folding rule. Read its 15-line <code>measure()</code> function and map each line to a slide
+  above.</div>
+  <div class="box cite"><span class="tag">Repo</span>
+  The sampled-output honesty note: <a href="../src/nco/nco.vhd">src/nco/nco.vhd</a> header,
+  “SAMPLED-OUTPUT LIMIT”; also <a href="../docs/protocol.md">docs/protocol.md</a> §8 and
+  <a href="../docs/rf.md">docs/rf.md</a> §1.</div>
+</section>
+
+<!-- ======================= PART 2 ======================= -->
+<section class="slide" id="p2">
+  <div class="kicker">Part 2 · Direct digital synthesis</div>
+  <h2>The NCO: one adder is a radio</h2>
+  <p>A <a href="https://en.wikipedia.org/wiki/Direct_digital_synthesis">numerically controlled
+  oscillator</a> is the smallest radio brain there is: a register of N bits that adds a
+  constant <span class="mono">I</span> every clock, wrapping around modulo 2ᴺ, with its
+  <strong>most significant bit wired to the pin</strong>.</p>
+  <figure>
+  <svg viewBox="0 0 900 240" role="img" aria-label="phase accumulator and MSB">
+    <line x1="30" y1="100" x2="880" y2="100" stroke="#94a3b8"/>
+    <line x1="30" y1="20" x2="30" y2="215" stroke="#334155"/>
+    <path d="M30,100 L80,30 L80,100 L130,30 L130,100 L180,30 L180,100 L230,30 L230,100 L280,30 L280,100 L330,30 L330,100 L380,30 L380,100 L430,30 L430,100 L480,30 L480,100 L530,30 L530,100 L580,30 L580,100 L630,30 L630,100 L680,30 L680,100 L730,30 L730,100 L780,30 L780,100 L830,30 L830,100 L880,30"
+          fill="none" stroke="#0e7490" stroke-width="2"/>
+    <text x="40" y="18" font-size="11" fill="#0e7490">phase accumulator (wraps mod 2⁴⁰)</text>
+    <line x1="30" y1="228" x2="880" y2="228" stroke="#94a3b8"/>
+    <path d="M30,220 L80,220 L80,196 L130,196 L130,220 L180,220 L180,196 L230,196 L230,220 L280,220 L280,196 L330,196 L330,220 L380,220 L380,196 L430,196 L430,220 L480,220 L480,196 L530,196 L530,220 L580,220 L580,196 L630,196 L630,220 L680,220 L680,196 L730,196 L730,220 L780,220 L780,196 L830,196 L830,220 L880,220"
+          fill="none" stroke="#b45309" stroke-width="2.4"/>
+    <text x="40" y="216" font-size="11" fill="#b45309">MSB → rf_out (high while phase in top half)</text>
+  </svg>
+  <figcaption>The sawtooth is the phase; the MSB is a square wave at the wrap rate. Frequency is
+  the <em>slope</em> of the sawtooth — change the slope, keep the continuity.</figcaption>
+  </figure>
+  <div class="math">f<sub>out</sub> = I · f<sub>clk</sub> / 2ᴺ &nbsp;&nbsp;with N = 40:&nbsp;
+  f<sub>out</sub> = I · 12 MHz / 2⁴⁰, &nbsp; one LSB = 1.0914 × 10⁻⁵ Hz</div>
+  <div class="box theory"><span class="tag">The wrap IS the modulus</span>
+  In <code>numeric_std</code>, <code>phase_acc + unsigned(increment)</code> produces a result as
+  wide as the widest operand; assigning it back to the 40-bit register <em>truncates the carry</em>.
+  That truncation is the modulo — there is no magic
+  (<a href="../src/nco/nco.vhd">nco.vhd</a>, student-review note). The register is cleared by
+  reset: RF off, plan §31.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 2 · Direct digital synthesis</div>
+  <h2>Folding: what the pin really does at 10.14 MHz</h2>
+  <p>Our default carrier (10 140 200 Hz) is <strong>above Nyquist</strong> (6 MHz). The
+  accumulator wraps faster than once per two clocks, so the pin pattern <em>looks</em> like a
+  slow, edge-jittered wave at 12 − 10.14 = 1.86 MHz. But the spectrum tells the truth:</p>
+  <figure>
+  <svg viewBox="0 0 900 230" role="img" aria-label="spectrum lines of the 1-bit output">
+    <line x1="40" y1="190" x2="880" y2="190" stroke="#334155"/>
+    <line x1="40" y1="20" x2="40" y2="190" stroke="#334155"/>
+    <g stroke="#0e7490">
+      <line x1="110" y1="190" x2="110" y2="40" stroke-width="5"/>
+      <line x1="300" y1="190" x2="300" y2="160" stroke-width="5"/>
+      <line x1="655" y1="190" x2="655" y2="126" stroke-width="5"/>
+      <line x1="845" y1="190" x2="845" y2="160" stroke-width="4"/>
+    </g>
+    <line x1="590" y1="190" x2="590" y2="170" stroke="#b91c1c" stroke-width="5"/>
+    <text x="110" y="30" text-anchor="middle" font-size="12" fill="#0e7490">fold 1.8598 MHz</text>
+    <text x="110" y="44" text-anchor="middle" font-size="11" fill="#b45309">strongest — but tone-INVERTED</text>
+    <text x="300" y="150" text-anchor="middle" font-size="11" fill="#64748b">2f? (n·f_s lines)</text>
+    <text x="590" y="160" text-anchor="middle" font-size="12" fill="#b91c1c">clock 12.000 MHz</text>
+    <text x="655" y="116" text-anchor="middle" font-size="12" fill="#0e7490" font-weight="bold">carrier image 10.1402 MHz</text>
+    <text x="655" y="130" text-anchor="middle" font-size="11" fill="#0e7490">correct tone order — filter selects this</text>
+    <text x="845" y="150" text-anchor="middle" font-size="11" fill="#64748b">13.8598</text>
+  </svg>
+  <figcaption>Lines exist at m·f<sub>s</sub> ± f<sub>alias</sub>, each weighted by the ZOH sinc
+  envelope. Measured by <code>tools/check_tone_order.py</code>: fold/RF = +14.6 dB (sinc model
+  +14.75 dB).</figcaption>
+  </figure>
+  <div class="box warn"><span class="tag">The tone-order rule</span>
+  A line at <span class="mono">F ≡ +f<sub>carrier</sub> (mod f<sub>s</sub>)</span> carries the
+  4-FSK symbols in the <strong>correct</strong> order; a line at
+  <span class="mono">F ≡ −f<sub>carrier</sub></span> carries them <strong>inverted</strong>.
+  The fold is stronger but <em>undecodable</em>. “Never use the fold” —
+  <a href="../docs/rf.md">docs/rf.md</a> §1, verified numerically.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 2 · Direct digital synthesis</div>
+  <h2>Jitter, spurs, and other honest ugliness</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><strong>Edge jitter</strong>: with an arbitrary increment, high/low intervals alternate
+        between ⌊P/2⌋ and ⌈P/2⌉ clocks — every edge carries up to ±1 clock of jitter. The
+        <em>frequency law stays exact in the average</em>, and the receiver integrates thousands of
+        cycles per symbol.</li>
+        <li><strong>Spurs</strong>: the phase-accumulator truncation creates discrete spurious
+        lines (DDS spurs, the classic <span class="mono">2ᴺ/gcd</span> family
+        — <a href="https://en.wikipedia.org/wiki/Direct_digital_synthesis">DDS literature</a>).
+        Narrowband filtering + the decoder's own processing handles them here.</li>
+        <li><strong>Resolution vs spacing</strong>: one LSB is 1.09 × 10⁻⁵ Hz; the tone grid needs
+        0.7324 Hz steps — a margin of ≈134 000 LSBs. (An earlier draft of the header said
+        “hundreds of thousands” — the fresh-student review fixed the arithmetic. Truth wins.)</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box story"><span class="tag">War story: the unused constant</span>
+      <code>nco.vhd</code> once declared <code>NOMINAL_CLOCK_HZ := 12_000_000</code> and then
+      never used it — while its own comment explained that no clock constant was needed. A
+      reviewer given <em>only this file</em> reported: “my first reaction was that I must be
+      missing something.” Dead constants read as hidden requirements. Deleted; the provenance
+      moved to a comment.</div>
+      <div class="box practice"><span class="tag">Practice 2.1</span>
+      <ol>
+        <li>Compute (paper) the increment for 3 570 100 Hz at 12 MHz, then check with
+        <code>tools/calculate_nco.py --frequency 3570100</code>.</li>
+        <li>Read <a href="../src/nco/nco.vhd">nco.vhd</a> in one sitting — it is ~90 lines and the
+        model teaching artifact of this repo.</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PART 3 ======================= -->
+<section class="slide" id="p3">
+  <div class="kicker">Part 3 · Communication theory</div>
+  <h2>FSK: information in the slope</h2>
+  <p><a href="https://en.wikipedia.org/wiki/Frequency-shift_keying">Frequency-shift keying</a>
+  maps symbols to frequencies. WSPR is <strong>4-FSK</strong>: symbols 0..3 → four tones,
+  spacing Δf = 1.46484375 Hz, symbol rate R<sub>s</sub> = 1.46484375 baud. Therefore</p>
+  <div class="math">modulation index&nbsp; h = Δf / R<sub>s</sub> = 1.0 &nbsp;(exactly)</div>
+  <p>— the tones are spaced by exactly one symbol rate. At h = 1 the four FSK tones are
+  (nearly) <a href="https://en.wikipedia.org/wiki/Orthogonality">orthogonal</a> over one symbol:
+  a receiver can measure <em>which</em> tone was sent without caring about its exact phase —
+  <strong>non-coherent demodulation</strong>, which is what <code>wsprd</code> does
+  (<code>wsprd.c</code> sync + symbol integration).</p>
+  <div class="cols">
+    <div>
+      <h3>Continuous phase — the WSPR trick</h3>
+      <p><a href="https://en.wikipedia.org/wiki/Continuous-phase_modulation">Continuous-phase
+      modulation</a> forbids phase jumps at symbol boundaries: one accumulator serves the whole
+      transmission; a symbol change alters only the <em>slope</em>. Phase jumps would splatter
+      sidebands and rob the decoder of the clean tone lines it correlates against.</p>
+    </div>
+    <div>
+      <h3>Contrast: MSK</h3>
+      <p><a href="https://en.wikipedia.org/wiki/Minimum-shift_keying">MSK</a> is CPFSK with
+      h = 0.5 (binary). WSPR is its 4-ary, slower cousin at h = 1 — same family, different
+      constants, all cited in <a href="../docs/protocol.md">docs/protocol.md</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 3 · Communication theory</div>
+  <h2>Why −31 dB SNR is survivable: the link budget</h2>
+  <p>WSPR's acceptance number is <strong>SNR = −31 dB in a 2500 Hz reference bandwidth</strong>.
+  Here is the whole derivation, from physics up (kT = −174 dBm/Hz at 290 K):</p>
+  <table>
+    <tr><th>Step</th><th>Value</th><th>Reason</th></tr>
+    <tr><td>Noise floor in 2.5 kHz</td><td>−174 + 10·log₁₀(2500) = <strong>−140 dBm</strong></td><td>thermal noise × bandwidth</td></tr>
+    <tr><td>Signal power at −31 dB SNR</td><td>−140 − 31 = <strong>−171 dBm</strong></td><td>4 × 10⁻²⁰ W (!)</td></tr>
+    <tr><td>Carrier-to-noise density</td><td>C/N₀ = −171 − (−174) = <strong>+3.0 dB·Hz</strong></td><td>noise density N₀ = −174 dBm/Hz</td></tr>
+    <tr><td>Information rate</td><td>50 bits / 110.592 s = <strong>0.4521 bit/s</strong></td><td>the FEC payload (part 4)</td></tr>
+    <tr><td>Energy per bit</td><td>E<sub>b</sub>/N₀ = 3.0 + 10·log₁₀(1/0.4521) ≈ <strong>+6.4 dB</strong></td><td>E<sub>b</sub>/N₀ = (C/N₀)/R<sub>b</sub></td></tr>
+  </table>
+  <p>The second view: <em>correlating the whole 110.6 s message against the 2.5 kHz reference
+  buys 10·log₁₀(2500 × 110.59) = 54.4 dB of processing gain</em>, turning −31 dB into
+  ≈ <strong>+23 dB</strong> for the full-message decision. Same physics, two bookkeeping
+  routes — <a href="https://en.wikipedia.org/wiki/Eb/N0">E<sub>b</sub>/N₀</a> and
+  <a href="https://en.wikipedia.org/wiki/Link_budget">link budget</a>.</p>
+  <div class="box theory"><span class="tag">The trade you are feeling</span>
+  WSPR spends 110.6 seconds and a 50-bit message to buy 54 dB. Every weak-signal mode is this
+  trade: <em>rate for margin</em>. Compare: FT8 ≈ 12.6 s/77 bits; WSPR is the slow extreme of
+  the WSJT family (<a href="https://en.wikipedia.org/wiki/WSJT_(software)">WSJT</a>).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 3 · Communication theory</div>
+  <h2>The matched filter and why FEC completes the story</h2>
+  <div class="cols">
+    <div>
+      <h3>Correlation is the receiver</h3>
+      <p>The optimal detector for a known signal in white noise is the
+      <a href="https://en.wikipedia.org/wiki/Matched_filter">matched filter</a>: multiply by the
+      expected waveform and integrate. <code>wsprd</code> does exactly this twice over — first to
+      find the <strong>sync</strong> pattern (part 4), then per symbol to pick the best tone. The
+      54 dB “gain” above is nothing mystical: it is the matched filter's integration.</p>
+    </div>
+    <div>
+      <h3>Why FEC lets you live at E<sub>b</sub>/N₀ ≈ 6 dB</h3>
+      <p>Raw 4-FSK at h = 1 needs ≈ 9–10 dB E<sub>b</sub>/N₀ for usable symbol errors. WSPR
+      operates 3 dB lower because a <strong>rate-½, K=32 convolutional code</strong> (part 4)
+      plus sequential decoding converts a sparse error pattern into zero errors —
+      <a href="https://en.wikipedia.org/wiki/Forward_error_correction">forward error
+      correction</a> trades bandwidth (×2 redundancy + sync) for a lower operating point.</p>
+      <div class="box theory"><span class="tag">Book</span>
+      Sklar, <em>Digital Communications</em>, ch. 5–7 (FSK, detection, FEC) — the clearest
+      treatment of the detection triangle in print. Proakis &amp; Salehi ch. 4/7 for the
+      rigorous version.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PART 4 ======================= -->
+<section class="slide" id="p4">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>WSPR: a protocol engineered for −31 dB</h2>
+  <p><a href="https://en.wikipedia.org/wiki/WSPR_(amateur_radio)">WSPR</a> (Weak Signal
+  Propagation Reporting, pronounced “whisper”) was written by
+  <a href="https://en.wikipedia.org/wiki/Joe_Taylor_(radio_amateur)">Joe Taylor, K1JT</a>
+  (Nobel laureate physicist) and released in 2008 as part of the
+  <a href="https://en.wikipedia.org/wiki/WSJT_(software)">WSJT</a> family. It is a
+  <em>measurement</em> protocol: beacons transmit, receivers report what they heard to
+  <a href="https://wsprnet.org">wsprnet.org</a>, and the collective map reveals propagation.</p>
+  <div class="cols">
+    <div>
+      <h3>The frame</h3>
+      <ul>
+        <li>Transmissions start <strong>1.000 s into an even UTC minute</strong>
+        (spec §7 — frozen by the empirical adjudication of part 8).</li>
+        <li>Duration <strong>110.592 s</strong>, then silence to the next even minute.</li>
+        <li>162 channel symbols × 0.682667 s; four tones 1.46484375 Hz apart.</li>
+        <li>Band segments per band plan (part 7); slot masks reduce duty cycle.</li>
+      </ul>
+    </div>
+    <div>
+      <figure>
+      <svg viewBox="0 0 900 150" role="img" aria-label="WSPR frame timing">
+        <line x1="30" y1="90" x2="880" y2="90" stroke="#334155"/>
+        <rect x="30" y="70" width="97" height="20" fill="#e2e8f0"/>
+        <rect x="127" y="62" width="700" height="36" rx="6" fill="#cfe9f2" stroke="#0e7490"/>
+        <rect x="827" y="70" width="53" height="20" fill="#e2e8f0"/>
+        <text x="78" y="118" text-anchor="middle" font-size="11" fill="#475569">1.000 s silence</text>
+        <text x="477" y="118" text-anchor="middle" font-size="12" fill="#0e7490" font-weight="bold">transmission 110.592 s</text>
+        <text x="853" y="118" text-anchor="middle" font-size="11" fill="#475569">8.4 s</text>
+        <g stroke="#334155"><line x1="127" y1="40" x2="127" y2="90"/></g>
+        <text x="127" y="32" text-anchor="middle" font-size="11">TX starts (second=1 of even minute)</text>
+        <text x="30" y="32" font-size="11">even minute boundary (t=0)</text>
+        <line x1="30" y1="45" x2="127" y2="45" stroke="#b91c1c" stroke-dasharray="4 3"/>
+        <text x="40" y="58" font-size="10" fill="#b91c1c">+1.000 s (frozen, spec §7)</text>
+      </svg>
+      <figcaption>The 2-minute WSPR cycle. Our scheduler fires on
+      <code>minute_even AND second = 1</code>.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>Type-1 message: 50 bits is enough</h2>
+  <p>A WSPR message is a callsign, a 4-character Maidenhead grid, and a power in dBm — e.g.
+  <strong>“K1ABC FN42 37”</strong> (37 dBm = 5 W). All of it fits in 50 bits:</p>
+  <figure>
+  <svg viewBox="0 0 900 170" role="img" aria-label="message packing">
+    <rect x="30" y="30" width="330" height="44" rx="8" fill="#cfe9f2" stroke="#0e7490"/>
+    <text x="195" y="50" text-anchor="middle" font-size="13" font-weight="bold">CALLSIGN → n (28 bits)</text>
+    <text x="195" y="66" text-anchor="middle" font-size="11">mixed radix 36·10·27·27·27</text>
+    <rect x="390" y="30" width="240" height="44" rx="8" fill="#fef3c7" stroke="#b45309"/>
+    <text x="510" y="50" text-anchor="middle" font-size="13" font-weight="bold">GRID4 → 15 bits</text>
+    <text x="510" y="66" text-anchor="middle" font-size="11">((179−10·g0−g2)·180+10·g1+g3)</text>
+    <rect x="660" y="30" width="210" height="44" rx="8" fill="#dcfce7" stroke="#15803d"/>
+    <text x="765" y="50" text-anchor="middle" font-size="13" font-weight="bold">POWER → 7 bits</text>
+    <text x="765" y="66" text-anchor="middle" font-size="11">value + 64</text>
+    <path d="M195,74 L195,104 L435,104" stroke="#334155" fill="none" marker-end="url(#ar)"/>
+    <path d="M510,74 L510,104 L465,104" stroke="#334155" fill="none" marker-end="url(#ar)"/>
+    <path d="M765,74 L765,104 L495,104" stroke="#334155" fill="none" marker-end="url(#ar)"/>
+    <rect x="435" y="104" width="70" height="30" rx="6" fill="#fff" stroke="#334155"/>
+    <text x="470" y="124" text-anchor="middle" font-size="12" font-weight="bold">50 bits</text>
+    <text x="30" y="150" font-size="11" fill="#64748b">“K1ABC FN42 37” → payload F7 0C 23 8B 0D 19 40 (golden vector, spec §15)</text>
+  </svg>
+  <figcaption>The packing formulas above are quoted from
+  <a href="../reference/wspr_reference.py">reference/wspr_reference.py</a> — the golden model
+  cross-checked 0/162 against <code>wsprcode</code>.</figcaption>
+  </figure>
+  <div class="box theory"><span class="tag">Mixed radix, the idea</span>
+  Positional restrictions are free compression: a callsign's first char is a letter (26 values),
+  char 2 is alphanumeric (36), char 3 a digit (10), chars 4–6 letters/space (27 each).
+  26·36·10·27³ ≈ 1.8 × 10⁸ &lt; 2²⁸ ≈ 2.7 × 10⁸ — it fits. The same trick packs the grid
+  (A–R letters, digits) into 15 bits. Type-2 (prefix/suffix) and Type-3 (&lt;hash&gt;)
+  messages exist in the protocol but are out of scope for this beacon
+  (the model rejects them with a clear error).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>FEC: a K=32 convolutional code</h2>
+  <div class="cols">
+    <div>
+      <p>WSPR protects the 50 payload bits with a <strong>rate-½ convolutional code of constraint
+      length K = 32</strong> — extraordinary by terrestrial standards:</p>
+      <ul>
+        <li>50 payload + 31 flush zeros = 81 input bits → <strong>162 coded bits</strong>.</li>
+        <li>Polynomials <span class="mono">POLY1 = F2D05351</span>,
+        <span class="mono">POLY2 = E4613C47</span> (Layland–Lushbaugh), 32-bit shift register,
+        newest bit in the LSB; POLY1 parity emitted first (<a href="../docs/protocol.md">protocol.md</a> §3).</li>
+        <li>The 31 tail zeros flush the register so the trellis ends in a known state.</li>
+      </ul>
+    </div>
+    <div>
+      <figure>
+      <svg viewBox="0 0 440 190" role="img" aria-label="convolutional encoder">
+        <rect x="20" y="60" width="40" height="40" rx="6" fill="#cfe9f2" stroke="#0e7490"/>
+        <text x="40" y="85" text-anchor="middle" font-size="12">b(t)</text>
+        <g fill="#fff" stroke="#334155">
+          <rect x="90" y="60" width="30" height="30"/><rect x="130" y="60" width="30" height="30"/>
+          <rect x="170" y="60" width="30" height="30"/><rect x="210" y="60" width="30" height="30"/>
+          <rect x="250" y="60" width="30" height="30"/><rect x="290" y="60" width="30" height="30"/>
+        </g>
+        <text x="105" y="80" text-anchor="middle" font-size="10">b(t−1)</text>
+        <text x="145" y="80" text-anchor="middle" font-size="10">b(t−2)</text>
+        <text x="185" y="80" text-anchor="middle" font-size="10">…</text>
+        <text x="265" y="80" text-anchor="middle" font-size="10">b(t−30)</text>
+        <text x="225" y="105" text-anchor="middle" font-size="10" fill="#64748b">32-bit shift register (K = 32)</text>
+        <path d="M300,75 C340,75 340,30 380,30" stroke="#0e7490" fill="none" marker-end="url(#ar)"/>
+        <path d="M300,75 C340,75 340,140 380,140" stroke="#15803d" fill="none" marker-end="url(#ar)"/>
+        <text x="385" y="34" font-size="11" fill="#0e7490">c₁ = POLY1 ⊕ taps</text>
+        <text x="385" y="144" font-size="11" fill="#15803d">c₂ = POLY2 ⊕ taps</text>
+        <text x="120" y="160" font-size="11" fill="#475569">81 input bits → 162 output bits (rate ½)</text>
+        <text x="20" y="30" font-size="11" fill="#475569">each input bit → 2 parity bits from XOR “taps”</text>
+      </svg>
+      </figure>
+    </div>
+  </div>
+  <div class="box theory"><span class="tag">Why K=32, and why not Viterbi?</span>
+  A long constraint length buys a large <em>free distance</em> — more errors corrected per bit of
+  redundancy — which is exactly what a −31 dB link needs. The catch: Viterbi decoding needs 2³¹
+  states, which is not a thing. WSPR instead uses <strong>sequential decoding</strong> (Fano /
+  stack algorithms — <a href="https://en.wikipedia.org/wiki/Sequential_decoding">sequential
+  decoding</a>) plus optional <strong>ordered-statistics decoding</strong> (OSD), trading worst-case
+  effort for typical-case success. Hardware echo: our RTL only <em>encodes</em> — a 32-bit register
+  and two XOR trees (<a href="../src/wspr/wspr_fec.vhd">wspr_fec.vhd</a>).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>Interleaving and the sync comb</h2>
+  <div class="cols">
+    <div>
+      <h3>Interleave: scatter the errors</h3>
+      <p>Sequential decoding fails when errors <em>cluster</em>. WSPR permutes the 162 coded bits
+      with a fixed bit-reversal-with-carry permutation — frozen, not “an equivalent” one
+      (<a href="../src/wspr/wspr_interleave.vhd">wspr_interleave.vhd</a>). Unlike plain
+      bit-reversal it is <strong>not an involution</strong> (verified numerically with the golden
+      model): encoder and decoder both apply the same forward table.</p>
+      <h3>Sync: 63 of 162</h3>
+      <p>A fixed 162-bit sync vector (from <code>WSPRcode.f90:17-26</code>) marks
+      <strong>63 of the 162 symbols</strong>. Each channel symbol is
+      <span class="mono">tone = 2·data + sync</span>: when the sync bit is set, the symbol jumps
+      to the odd tone regardless of data — a known pattern the decoder can correlate against.</p>
+    </div>
+    <div>
+      <figure>
+      <svg viewBox="0 0 440 200" role="img" aria-label="sync vector comb">
+        <g>
+          <rect x="20" y="30" width="10" height="40" fill="#0e7490"/><rect x="40" y="30" width="10" height="40" fill="#0e7490"/>
+          <rect x="80" y="30" width="10" height="40" fill="#cbd5e1"/><rect x="100" y="30" width="10" height="40" fill="#cbd5e1"/>
+          <rect x="140" y="30" width="10" height="40" fill="#0e7490"/><rect x="160" y="30" width="10" height="40" fill="#cbd5e1"/>
+          <rect x="200" y="30" width="10" height="40" fill="#cbd5e1"/><rect x="220" y="30" width="10" height="40" fill="#0e7490"/>
+          <rect x="260" y="30" width="10" height="40" fill="#cbd5e1"/><rect x="280" y="30" width="10" height="40" fill="#0e7490"/>
+          <rect x="320" y="30" width="10" height="40" fill="#0e7490"/><rect x="340" y="30" width="10" height="40" fill="#cbd5e1"/>
+          <rect x="380" y="30" width="10" height="40" fill="#0e7490"/><rect x="400" y="30" width="10" height="40" fill="#0e7490"/>
+        </g>
+        <text x="230" y="90" text-anchor="middle" font-size="11" fill="#64748b">… 162 bits, 63 set (blue) …</text>
+        <path d="M20,130 C80,110 140,150 200,128 S320,110 420,132" stroke="#b45309" fill="none" stroke-width="2"/>
+        <text x="120" y="180" font-size="11" fill="#b45309">correlation peaks when aligned (time × frequency grid)</text>
+        <text x="20" y="20" font-size="11" fill="#475569">sync comb (fragment)</text>
+      </svg>
+      </figure>
+      <div class="box warn"><span class="tag">Folklore check</span>
+      “The sync vector has 30 ones” floats around the internet. The golden vector —
+      wsprcode-verified — has <strong>63</strong>. When memory and the pinned source disagree,
+      the pinned source wins (this is rule 2 of the repo, and part 8's whole theme).</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>Inside wsprd: the decoder in five moves</h2>
+  <p>All of this is in the pinned source you have (<code>lib/wsprd/wsprd.c</code>):</p>
+  <ol>
+    <li><strong>Window &amp; downconvert</strong> — read the WAV (44-byte header ignored, 12 kHz
+    assumed, first 114 s consumed), FFT, extract ~1500 Hz ± 110 Hz
+    (<code>readwavfile</code>, <code>fmin/fmax = ±110</code>; <code>-w</code> widens to ±150).</li>
+    <li><strong>Coarse candidates</strong> — FFT peaks with sync-correlation over a time/frequency
+    grid: drift ±(up to ±60 Hz/min), time offsets ≈ ±5.4 s around the nominal slot start
+    (“±8 symbols”).</li>
+    <li><strong>Sync + symbol demodulation</strong> — for each candidate, non-coherent per-symbol
+    tone energy (4 bins), soft values into metric tables.</li>
+    <li><strong>Sequential decode</strong> — Fano algorithm (metric bias 0.45, tunable), optionally
+    stack decoding or OSD; the 31 tail zeros pin the end state.</li>
+    <li><strong>Two passes with subtraction</strong> — decoded signals are <em>subtracted</em> from
+    the waveform and the pass repeats, so several beacons per file decode; a callsign
+    <a href="https://en.wikipedia.org/wiki/Hash_table">hash table</a> speeds repeats
+    (<code>-H</code> disables).</li>
+  </ol>
+  <div class="box practice"><span class="tag">Practice 4.1 — read the evidence</span>
+  The full synthetic adjudication (WAV synthesis → decode → timing table) is recorded in
+  <a href="../docs/verification.md">docs/verification.md</a> §2, and
+  <code>tools/make_wspr_wav.py</code> regenerates it. Run it, then find the same five moves in
+  <code>wsprd.c</code>.</div>
+</section>
+
+<!-- ======================= PART 5 ======================= -->
+<section class="slide" id="p5">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>No CPU. Deliberately.</h2>
+  <p>Everything could be a microcontroller and a library. This project refuses, on purpose
+  (plan §1.2, §33):</p>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><strong>Teaching</strong> — every block is a readable VHDL file you can
+        <em>finish</em>: RTL + testbench + documentation (rule 2).</li>
+        <li><strong>Honesty</strong> — protocol constants must be synthesized into gates, not
+        hidden in a string library.</li>
+        <li><strong>Determinism</strong> — no RTOS, no jitter from software; the 1PPS→TX path is
+        a fixed logic pipeline.</li>
+      </ul>
+      <p>The cost: you must think in <em>clocks and handshakes</em>. Part 9 teaches that
+      vocabulary.</p>
+    </div>
+    <div>
+      <h3>Contract discipline</h3>
+      <p>Each block has: named generics with provenance comments, a written port contract
+      (<a href="../docs/gps.md">docs/gps.md</a>), and a testbench that exercises success
+      <em>and</em> failure paths. One agent implements; a different agent reviews — the
+      separation-of-duties rule that caught the modulator skew (part 6).</p>
+      <div class="box theory"><span class="tag">FPGA fabric, 30 seconds</span>
+      An FPGA is a sea of small lookup tables (LUTs) + flip-flops + routing. A 40-bit adder
+      becomes ~40 chained LUT/FF pairs; the tool (<code>nextpnr-ice40</code>) places and routes
+      them; <code>icetime</code> reports the slowest path. Our build: <strong>31.09 MHz vs the
+      12 MHz requirement</strong> — comfortable margin.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>Clocking, POR, and the two LEDs</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><strong>One clock domain</strong>: the 12 MHz oscillator, pin 35. No PLL in v1 —
+        <code>clock_control.vhd</code> is an empty placeholder by design.</li>
+        <li><strong>Power-on reset</strong>: 16 cycles held in reset at configuration
+        (<a href="../src/top.vhd">top.vhd</a> <code>por</code> process). No reset pin on the
+        board; FPGAs start from a known state, and the declaration-time register inits are
+        backed by the POR.</li>
+        <li><strong>led1</strong> (pin 11): heartbeat — toggles every 6 000 000 cycles
+        ⇒ period 1 s (0.5 s high/low). “The clock is alive.”</li>
+        <li><strong>led2</strong> (pin 37): ready = UTC valid AND calibration valid
+        (<code>cal_valid</code>, <em>not</em> <code>cal_frozen</code> — review finding M5:
+        frozen is also set on out-of-bounds errors).</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box story"><span class="tag">War story: M5, a lit LED lying to you</span>
+      The ready LED originally used <code>cal_frozen</code>. But the calibration block asserts
+      <code>frozen</code> <strong>and</strong> <code>error</code> <em>together</em> on an
+      out-of-bounds window — so the beacon cheerfully announced “ready to transmit” during a
+      calibration <em>failure</em>. The testbench even asserted this combination (Scenario C) —
+      the fix was one word, the review was the hero. LEDs are contracts too.</div>
+      <div class="box cite"><span class="tag">Repo</span>
+      Pins are taken only from <a href="../constraints/icebreaker.pcf">constraints/icebreaker.pcf</a>,
+      which cites the official iCEBreaker examples commit <code>cb9e674c</code>. Never invent
+      pin numbers (AGENTS.md rule 4).</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>GPS: buying the truth for $12</h2>
+  <div class="cols">
+    <div>
+      <h3>Two products of one module</h3>
+      <ul>
+        <li><strong>1PPS</strong> — a pulse per second, disciplined to the atomic clocks behind
+        <a href="https://en.wikipedia.org/wiki/GPS">GPS</a>: the <em>time</em> reference
+        (<a href="https://en.wikipedia.org/wiki/Pulse_per_second">pulse per second</a>).</li>
+        <li><strong>NMEA 0183</strong> — 9600 8N1 serial sentences
+        (<a href="https://en.wikipedia.org/wiki/NMEA_0183">NMEA 0183</a>) saying <em>which</em>
+        second that pulse was. The beacon listens to <code>$GPRMC</code> (recommended minimum):
+        <code>$GPRMC,123519,A,···*47</code> — time 12:35:19, status A=valid, and an XOR
+        checksum between <code>$</code> and <code>*</code>.</li>
+      </ul>
+      <div class="box theory"><span class="tag">Who is primary?</span>
+      <strong>1PPS is primary; NMEA is the label.</strong> A committed sentence says which
+      second the <em>next</em> pulse starts; the pulse advances time. NMEA arrival timing is
+      jittery (9600 baud → characters take ~1 ms each); the pulse is not (plan §11).</div>
+    </div>
+    <div>
+      <h3>The UART, properly taught</h3>
+      <p><a href="../src/gps/gps_uart.vhd">gps_uart.vhd</a>: 2-FF synchronizer against
+      metastability, falling-edge start detection, then sample each data bit at its
+      <em>centre</em> (bit period = 12 MHz/9600 = 1250 cycles). Stop bit must be high, else a
+      one-cycle <code>framing_error</code> and the byte is discarded.</p>
+      <p><a href="../src/gps/gps_parser.vhd">gps_parser.vhd</a>: matches the address field
+      literally ('R','M','C'), XORs bytes into an 8-bit checksum, requires exactly six time
+      digits, commits on the CRLF — and re-arms on a stray <code>$</code> (review finding S8) so
+      a CRLF-less stream never swallows the next sentence. Corrupt input never changes committed
+      outputs (plan §31).</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>Measuring your own clock against the GPS second</h2>
+  <p><a href="../src/gps/pps_measure.vhd">pps_measure.vhd</a> counts clock cycles between 1PPS
+  rising edges. Two details make it correct:</p>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><strong>Reset-to-1</strong>: the interval counter re-arms to 1, so the latched value
+        is <em>exactly</em> the cycles in the completed second (the classic off-by-one, explained
+        in the header — the model teaching artifact of this repo).</li>
+        <li><strong>Timeout</strong>: no edge for 24 000 000 cycles (two GPS seconds) ⇒
+        <code>measurement_valid='0'</code> — PPS loss propagates (plan §31).</li>
+      </ul>
+      <figure>
+      <svg viewBox="0 0 440 160" role="img" aria-label="interval counter sawtooth">
+        <line x1="30" y1="130" x2="430" y2="130" stroke="#334155"/>
+        <path d="M30,120 L120,30 L120,120 L210,40 L210,120 L300,28 L300,120 L390,34 L390,120"
+              fill="none" stroke="#0e7490" stroke-width="2"/>
+        <g stroke="#b91c1c"><line x1="120" y1="20" x2="120" y2="130"/><line x1="210" y1="20" x2="210" y2="130"/><line x1="300" y1="20" x2="300" y2="130"/></g>
+        <text x="165" y="15" font-size="10" fill="#b91c1c">1PPS edges: latch, re-arm to 1</text>
+        <text x="40" y="148" font-size="11" fill="#475569">each tooth ≈ 12 000 000 ± 1 cycle (quantization)</text>
+      </svg>
+      </figure>
+    </div>
+    <div>
+      <h3>Averaging: √N, not N (review S1)</h3>
+      <p>Each measurement carries ±1 cycle of <em>quantization</em>. Averaging
+      <code>CALIBRATION_SECONDS = 8</code> valid measurements reduces the <strong>standard
+      error ≈ √N</strong> for dithered jitter — but the worst-case <em>bias</em> stays below
+      1 cycle/s (≈ 0.083 ppm) no matter how long you average. The header says exactly this
+      after the review; the earlier “divides the uncertainty by N” was wrong.</p>
+      <p>Then: round-half-up division, bounds check <strong>±1000 ppm</strong>
+      (11 988 000…12 012 000), out-of-bounds ⇒ <code>calibration_error</code> +
+      <code>calibration_valid='0'</code> ⇒ no transmit (plan §31). The value freezes for the
+      whole transmission and is re-measured before the next one (plan §7).</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>The scheduler: six states and an edge-based handshake</h2>
+  <figure>
+  <svg viewBox="0 0 900 240" role="img" aria-label="scheduler FSM">
+    <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker></defs>
+    <g font-size="12" text-anchor="middle" font-family="Arial">
+      <rect x="20" y="30" width="120" height="46" rx="10" fill="#fee2e2" stroke="#b91c1c"/>
+      <text x="80" y="50" font-weight="bold">WAIT_GPS</text><text x="80" y="66" font-size="10">utc_valid?</text>
+      <rect x="200" y="30" width="130" height="46" rx="10" fill="#fef9c3" stroke="#b45309"/>
+      <text x="265" y="50" font-weight="bold">CALIBRATE</text><text x="265" y="66" font-size="10">cal_start pulse</text>
+      <rect x="390" y="30" width="110" height="46" rx="10" fill="#dcfce7" stroke="#15803d"/>
+      <text x="445" y="50" font-weight="bold">READY</text><text x="445" y="66" font-size="10">fresh cal_valid edge</text>
+      <rect x="560" y="30" width="120" height="46" rx="10" fill="#dbeafe" stroke="#0e7490"/>
+      <text x="620" y="50" font-weight="bold">WAIT_SLOT</text><text x="620" y="66" font-size="10">minute_even &amp; sec=1</text>
+      <rect x="740" y="30" width="130" height="46" rx="10" fill="#e0f2fe" stroke="#0e7490"/>
+      <text x="805" y="50" font-weight="bold">TX</text><text x="805" y="66" font-size="10">162 symbol_ticks</text>
+      <rect x="560" y="150" width="120" height="46" rx="10" fill="#f3e8ff" stroke="#7c3aed"/>
+      <text x="620" y="170" font-weight="bold">TX_DONE</text><text x="620" y="186" font-size="10">1 cycle</text>
+    </g>
+    <g stroke="#334155" fill="none">
+      <line x1="140" y1="53" x2="198" y2="53" marker-end="url(#ar2)"/>
+      <line x1="330" y1="53" x2="388" y2="53" marker-end="url(#ar2)"/>
+      <line x1="500" y1="53" x2="558" y2="53" marker-end="url(#ar2)"/>
+      <line x1="680" y1="53" x2="738" y2="53" marker-end="url(#ar2)"/>
+      <path d="M805,76 L805,173 L682,173" marker-end="url(#ar2)"/>
+      <path d="M560,173 L330,173 L330,78" marker-end="url(#ar2)"/>
+      <path d="M200,60 L110,60 L110,76" stroke="#b91c1c" marker-end="url(#ar2)"/>
+    </g>
+    <text x="120" y="200" font-size="10" fill="#b91c1c">cal_error re-pulses cal_start</text>
+    <text x="330" y="160" font-size="10" fill="#15803d">TX_DONE → CALIBRATE: every TX preceded by a fresh calibration (plan §7)</text>
+    <text x="700" y="130" font-size="10" fill="#64748b">tx_enable = 1-cycle pulse into the modulator</text>
+  </svg>
+  <figcaption><code>state_o</code> exports 0..5 for diagnostics (plan §32). The handshake is
+  <em>edge-based</em>: READY only on a fresh <code>cal_valid</code> rising edge — a stale level
+  can never re-enter READY (<a href="../src/timing/wspr_scheduler.vhd">wspr_scheduler.vhd</a>).</figcaption>
+  </figure>
+  <div class="box story"><span class="tag">War story: S3, the no-op that hid a decision</span>
+  The TX state once contained <code>if utc_valid='0' then null; end if;</code> — a no-op
+  carrying a design decision in prose (“finish the transmission in progress; do not start a new
+  one”). Students hunt for the missing assignment. The review replaced it with a plain comment;
+  the decision — an RF cut mid-symbol would harm the decode more than the missing second — is
+  now where a reader looks for it.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>Failure behavior is part of the design (plan §31)</h2>
+  <table>
+    <tr><th>Condition</th><th>Required behaviour</th><th>Mechanism</th></tr>
+    <tr><td>No GPS / no fix</td><td>NO TX</td><td><code>utc_valid='0'</code> → WAIT_GPS; RMC status V drops UTC validity</td></tr>
+    <tr><td>PPS disappears</td><td>Invalidate calibration</td><td>timeout ⇒ <code>measurement_valid='0'</code>; window-in-progress abandoned; completed windows stay valid (documented S9 semantics)</td></tr>
+    <tr><td>Corrupt NMEA</td><td>Keep committed time</td><td>parser rejects on checksum/shape; outputs retained</td></tr>
+    <tr><td>Frequency out of bounds</td><td>Error, no TX</td><td><code>calibration_error='1'</code>, <code>calibration_valid='0'</code>; scheduler re-pulses <code>cal_start</code></td></tr>
+    <tr><td>Reset during TX</td><td>RF off immediately</td><td>modulator reset clears accumulator &amp; <code>rf_r</code></td></tr>
+  </table>
+  <div class="box theory"><span class="tag">The governing rule</span>
+  <strong>No GPS → no TX.</strong> A beacon that transmits at the wrong time is not a WSPR
+  beacon — it is a jammer with delusions. Every “safe” default in the FSM leans toward silence,
+  and the testbenches exercise each row above (negative paths, part 8).</div>
+  <div class="box practice"><span class="tag">Practice 5.1</span>
+  Run <code>make sim TB=tb_clock_calibration</code> and find Scenario C (out-of-bounds). Watch
+  <code>calibration_error</code> and <code>calibration_frozen</code> assert <em>together</em> —
+  the trap behind review finding M5. Then run <code>TB=tb_pps_measure</code> and find the
+  missing-pulse negative path.</div>
+</section>
+
+<!-- ======================= PART 6 ======================= -->
+<section class="slide" id="p6">
+  <div class="kicker">Part 6 · The modulator</div>
+  <h2>The centered tone grid, in silicon</h2>
+  <p>Spec §6 places the carrier at the <em>centre</em> of the four tones. Tone k therefore has
+  increment</p>
+  <div class="math">inc(k) = CARRIER_INCREMENT + (2k − 3) · HALF_TONE_INCREMENT
+  &nbsp;&nbsp;HALF = 67109 (= half of 134 217, rounded — the +1 LSB ≈ 1.1 × 10⁻⁵ Hz is documented)</div>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>The four increments are <strong>precomputed constants</strong>
+        (<code>INC_T0..T3</code>) — a runtime multiply of a 40-bit increment by a symbol value
+        costs ~130 ns, longer than the 83 ns clock (<a href="../src/wspr/wspr_modulator.vhd">wspr_modulator.vhd</a>
+        header). <strong>Precomputation is an FPGA lesson:</strong> trade multiplexers for
+        multipliers.</li>
+        <li>At each symbol boundary the modulator advances its own symbol counter and selects the
+        next constant <em>in the same clock</em> — the tone changes, the phase does not.</li>
+        <li>Provenance: <code>tools/calculate_nco.py</code> prints every increment and its
+        sub-µHz error.</li>
+      </ul>
+    </div>
+    <div>
+      <figure>
+      <svg viewBox="0 0 440 190" role="img" aria-label="4FSK tone staircase">
+        <line x1="30" y1="160" x2="430" y2="160" stroke="#334155"/>
+        <line x1="30" y1="20" x2="30" y2="160" stroke="#334155"/>
+        <g stroke="#0e7490" stroke-width="2.5" fill="none">
+          <path d="M30,140 H90 V124 H150 V108 H210 V92 H270 V76 H330 V60 H390 V44 H430"/>
+        </g>
+        <g font-size="11" fill="#475569">
+          <text x="50" y="178">tone 3</text><text x="110" y="178">tone 2</text>
+          <text x="170" y="178">tone 1</text><text x="230" y="178">tone 0</text>
+        </g>
+        <line x1="210" y1="20" x2="210" y2="160" stroke="#b45309" stroke-dasharray="4 4"/>
+        <text x="215" y="34" font-size="11" fill="#b45309">carrier = centre between tones 1 and 2</text>
+        <text x="40" y="30" font-size="11" fill="#0e7490">frequency steps of 1.46484375/2 = 0.732421875 Hz from centre</text>
+        <text x="40" y="44" font-size="11" fill="#64748b">phase is continuous across every step</text>
+      </svg>
+      <figcaption>Symbol 0 of the golden message is tone 3 — the decoder's sync starts high.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 6 · The modulator</div>
+  <h2>Symbol timing: the Bresenham trick</h2>
+  <p>The symbol duration is <span class="mono">CLOCK_HZ · 8192 / 12000</span> cycles — not an
+  integer for a real (calibrated) clock. The modulator splits it exactly:
+  <span class="mono">WHOLE + REM/12000</span>, and distributes the remainder with a
+  <a href="https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm">Bresenham</a> error term:</p>
+  <div class="math">symbol k gets WHOLE+1 cycles iff ((k+1)·REM mod 12000) ≥ 12000 − REM
+  ⇒ cumulative length of N symbols is EXACTLY ⌊N·CLOCK_HZ·8192/12000⌋</div>
+  <div class="cols">
+    <div>
+      <figure>
+      <svg viewBox="0 0 440 150" role="img" aria-label="bresenham boundaries">
+        <line x1="20" y1="100" x2="430" y2="100" stroke="#334155"/>
+        <g stroke="#0e7490" stroke-width="3">
+          <line x1="60" y1="92" x2="60" y2="108"/><line x1="139" y1="92" x2="139" y2="108"/>
+          <line x1="218" y1="92" x2="218" y2="108"/><line x1="298" y1="92" x2="298" y2="108"/>
+          <line x1="377" y1="92" x2="377" y2="108"/>
+        </g>
+        <g stroke="#b91c1c" stroke-dasharray="4 4">
+          <line x1="60" y1="40" x2="60" y2="100"/><line x1="139" y1="40" x2="139" y2="100"/>
+          <line x1="218" y1="40" x2="218" y2="100"/><line x1="298" y1="40" x2="298" y2="100"/>
+          <line x1="377" y1="40" x2="377" y2="100"/>
+        </g>
+        <text x="20" y="30" font-size="11" fill="#64748b">ideal boundaries (fractional)</text>
+        <text x="20" y="125" font-size="11" fill="#0e7490">8192 or 8193 cycles — error never accumulates</text>
+      </svg>
+      </figure>
+    </div>
+    <div>
+      <p><strong>Worked example</strong> (CLOCK_HZ = 12 001): WHOLE = 8192, REM = 8192, so
+      lengths alternate 8192/8193 and the 162-symbol total is exact. At the nominal 12 MHz,
+      REM = 0 and every symbol is exactly 8192 cycles.</p>
+      <div class="box theory"><span class="tag">Why it matters</span>
+      A decoder measures tone timing across <em>all</em> 162 symbols. A rounding error of even
+      one cycle per symbol would drift the grid by ~1.4 ms over a transmission — visible to the
+      sync search. Zero cumulative error is the whole point (plan §10).</div>
+      <div class="box practice"><span class="tag">Practice 6.1</span>
+      <code>make sim TB=tb_wspr_modulator</code> — Run B checks the fractional accumulator:
+      every length ∈ {8192, 8193} <em>and</em> the total within 1 cycle of the ideal.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 6 · The modulator</div>
+  <h2>War story M1: the one-symbol skew that ate the protocol</h2>
+  <p>The first integration let the <em>scheduler</em> count symbols and mux a 2-bit
+  <code>symbol_index</code> into the modulator. But <code>symbol_tick</code> is a
+  <strong>registered</strong> pulse: the scheduler advanced its counter one clock <em>after</em>
+  the modulator had already latched the index. The transmitted sequence became
+  <strong>(0, 0, 1, 2, …, 160)</strong> — symbol 0 repeated, symbol 161 never sent:</p>
+  <figure>
+  <svg viewBox="0 0 900 210" role="img" aria-label="M1 skew timeline">
+    <line x1="30" y1="60" x2="880" y2="60" stroke="#334155"/>
+    <text x="34" y="48" font-size="11" fill="#334155">clk</text>
+    <g stroke="#94a3b8"><line x1="130" y1="20" x2="130" y2="60"/><line x1="230" y1="20" x2="230" y2="60"/><line x1="330" y1="20" x2="330" y2="60"/><line x1="430" y1="20" x2="430" y2="60"/></g>
+    <line x1="130" y1="30" x2="130" y2="90" stroke="#b91c1c" stroke-width="2"/>
+    <text x="60" y="102" font-size="11" fill="#b91c1c">boundary B₁: modulator latches index — still 0</text>
+    <line x1="140" y1="120" x2="140" y2="160" stroke="#15803d" stroke-width="2"/>
+    <text x="150" y="150" font-size="11" fill="#15803d">B₁+1: scheduler's counter advances (registered tick!)</text>
+    <text x="34" y="192" font-size="12" fill="#334155">→ symbol 1 transmits tone(0); every later tone one symbol early; tone(161) never sent.</text>
+  </svg>
+  <figcaption>Found by the pedagogical review's scratch simulation of the <em>real</em> blocks —
+  the integration testbench checked timing and counts, never tone identity.</figcaption>
+  </figure>
+  <div class="cols">
+    <div>
+      <div class="box warn"><span class="tag">The fix is structural, not a patch</span>
+      The modulator now <strong>owns the symbol counter</strong> and receives the entire
+      324-bit tone vector; it advances index and selects the increment in the same clock. The
+      external mux was deleted — the skew is now <em>impossible by construction</em>. The
+      scheduler counts ticks only to detect the end of TX.</div>
+    </div>
+    <div>
+      <div class="box practice"><span class="tag">Regression armor (M7)</span>
+      <code>tb_wspr_top</code> now derives every symbol's tone class from its rising-edge count
+      and checks all 162 against the golden vector: <code>all 162 symbol tone classes match
+      TONE_GOLDEN</code>. The test that would have caught M1 on day one is now permanent.</div>
+    </div>
+  </div>
+  <div class="box theory"><span class="tag">Design law to take away</span>
+  When two blocks must agree at the same clock edge, do not share a <em>registered</em> event —
+  share the <em>state</em>, or let one block own the whole concern. Interfaces multiply bugs;
+  ownership deletes them.</div>
+</section>
+
+<!-- ======================= PART 7 ======================= -->
+<section class="slide" id="p7">
+  <div class="kicker">Part 7 · The RF chain</div>
+  <h2>From a logic pin to an antenna</h2>
+  <div class="math">rf_out (pin 28) → series R → [buffer/driver] → band-pass filter → attenuator
+  → 50 Ω dummy load (bench) … later, licensed: antenna</div>
+  <div class="cols">
+    <div>
+      <h3>Band selection (docs/rf.md §2)</h3>
+      <table>
+        <tr><th>Band</th><th>RF centre</th><th>Line used</th><th>w (sinc est.)</th></tr>
+        <tr><td>160 m</td><td>1 838 100 Hz</td><td>direct</td><td>−0.34 dB</td></tr>
+        <tr><td><strong>80 m</strong></td><td><strong>3 570 100 Hz</strong></td><td><strong>direct</strong></td><td><strong>−1.30 dB</strong></td></tr>
+        <tr><td>40 m</td><td>7 040 100 Hz</td><td>image 12−4.96</td><td>−5.64 dB</td></tr>
+        <tr><td>30 m</td><td>10 140 200 Hz</td><td>image 12−1.86</td><td>−15.08 dB</td></tr>
+      </table>
+      <p>Dial frequencies cited to the pinned WSJT-X source; RF = dial + 1500 Hz
+      (<code>mainwindow.cpp:9832</code>). Bring-up order: <strong>80 m first</strong> (direct,
+      easy filter), then 40 m (easy image), then 30 m (flagship, −15 dB image).</p>
+    </div>
+    <div>
+      <h3>Filter requirements</h3>
+      <ul>
+        <li>Pass the carrier (a 6 Hz-wide signal needs only a few hundred Hz of passband).</li>
+        <li>Reject the <strong>12 MHz clock line</strong> — for 30 m it is only 1.86 MHz above
+        the carrier: the hardest item.</li>
+        <li>Reject the <strong>folded alias</strong> (tone-inverted! part 2) and the odd
+        harmonics (3f, 5f, …) of the square wave.</li>
+        <li>Set the transmitted noise floor: the 1-bit DAC spreads broadband noise — the filter
+        defines what leaves the box.</li>
+      </ul>
+      <div class="box warn"><span class="tag">Never radiate the bench</span>
+      “K1ABC FN42 37” is a simulation vector. Bench tests use a dummy load; over-the-air
+      requires a licence and the operator's callsign compiled into <code>top.vhd</code>
+      (plan §25). The default slot mask transmits every even minute — reduce it before any OTA.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 7 · The RF chain</div>
+  <h2>Filter design in one slide, then one evening</h2>
+  <div class="cols">
+    <div>
+      <h3>The theory you actually need</h3>
+      <ul>
+        <li>A filter is a frequency-selective voltage divider built from resonators. A series LC
+        is a short at resonance; a parallel LC is an open. Combine them and you steer
+        frequencies (<a href="https://en.wikipedia.org/wiki/Band-pass_filter">band-pass filter</a>).</li>
+        <li><a href="https://en.wikipedia.org/wiki/Q_factor">Loaded Q</a> = f₀/BW sets the
+        sharpness: high Q ⇒ narrow and lossy, low Q ⇒ sloppy skirts.</li>
+        <li><a href="https://en.wikipedia.org/wiki/Butterworth_filter">Butterworth</a> =
+        flattest passband; <a href="https://en.wikipedia.org/wiki/Chebyshev_filter">Chebyshev</a>
+        = steeper skirts for passband ripple. For WSPR, 2–4 poles of Butterworth is plenty.</li>
+        <li>Resonator: <span class="mono">f₀ = 1/(2π√(LC))</span> — pick L, solve C.</li>
+      </ul>
+    </div>
+    <div>
+      <figure>
+      <svg viewBox="0 0 460 200" role="img" aria-label="bandpass filter response">
+        <line x1="30" y1="170" x2="440" y2="170" stroke="#334155"/>
+        <line x1="30" y1="20" x2="30" y2="170" stroke="#334155"/>
+        <path d="M30,165 C120,160 200,150 250,60 C270,25 290,25 310,60 C360,150 430,160 440,165"
+              fill="none" stroke="#0e7490" stroke-width="2.5"/>
+        <line x1="300" y1="20" x2="300" y2="170" stroke="#15803d" stroke-dasharray="4 4"/>
+        <text x="306" y="32" font-size="11" fill="#15803d">3 570 100 Hz (80 m carrier)</text>
+        <g stroke="#b91c1c"><line x1="100" y1="40" x2="100" y2="170"/><line x1="430" y1="60" x2="430" y2="170"/></g>
+        <text x="40" y="35" font-size="11" fill="#b91c1c">f/3, f/5 harmonics</text>
+        <text x="360" y="52" font-size="11" fill="#b91c1c">12 MHz clock</text>
+        <text x="60" y="120" font-size="11" fill="#64748b">reject</text>
+        <text x="255" y="90" font-size="11" fill="#0e7490">pass</text>
+      </svg>
+      </figure>
+      <div class="box practice"><span class="tag">Worked exercise (not a ratified design)</span>
+      Design a 2-pole Butterworth BPF: f₀ = 3.5701 MHz, BW = 100 kHz ⇒ Q<sub>loaded</sub> = 35.7.
+      Choose L = 1 µH ⇒ C = 1/((2πf₀)²L) ≈ <strong>1.99 nF</strong>. Verify in a circuit
+      simulator, then measure — docs/rf.md §8 requires the <em>measured</em> pin spectrum before
+      final values are chosen. Classic build literature: the ARRL Handbook; Hayward et al.,
+      <em>Experimental Methods in RF Design</em> (“EMRFD”).</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 7 · The RF chain</div>
+  <h2>Levels: honest arithmetic</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>A 0–3.3 V square wave's fundamental is 4·(3.3/2)/π ≈ 2.10 V<sub>pk</sub>
+        (1.48 V RMS) ⇒ <strong>+16.4 dBm into 50 Ω</strong> — but the pin cannot deliver it.</li>
+        <li>3.3 V into 50 Ω is ~66 mA — far beyond a logic pin. Keep the load high-impedance:
+        series R or a buffer stage. The iCE40 data-sheet limit is PENDING-HARDWARE
+        (docs/rf.md §4).</li>
+        <li>Through a 330 Ω series resistor: ≈ 0.20 V RMS into 50 Ω ≈ <strong>−1 dBm</strong>.
+        WSPR decodes to −31 dB SNR — milliwatts get spotted on 160/80 m with a real antenna.</li>
+        <li>The 30 m image starts ~15 dB down (part 2) — subtract that from any image-band
+        budget.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">Ghost images, one last look</span>
+      The pin's spectrum is a comb of images <span class="mono">m·f<sub>s</sub> ± f</span> — the
+      sampled-data “ghost” of part 1, now at RF. The superhet
+      <a href="https://en.wikipedia.org/wiki/Image_frequency">image frequency</a> and the TV
+      ghost are the same disease in other organs: once you can see images, you find them in
+      every receiver block diagram you will ever read.</div>
+      <div class="box cite"><span class="tag">Repo</span>
+      <a href="../docs/rf.md">docs/rf.md</a> is the full annex: band table with increments,
+      the tone-order rule and its numeric proof, filter checklist, level estimates, legal
+      rules, PENDING-HARDWARE list.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PART 8 ======================= -->
+<section class="slide" id="p8">
+  <div class="kicker">Part 8 · Verification</div>
+  <h2>“It synthesizes” is not done</h2>
+  <p>The repo's definition of finished is <strong>RTL + testbench + documentation</strong> with a
+  functional test that can fail (rules 2–3). Layered like armor:</p>
+  <ol>
+    <li><strong>Golden vectors</strong> — a frozen, human-readable answer per block
+    (e.g. <a href="../reference/test_vectors/k1abc_fn42_37.txt">k1abc_fn42_37.txt</a>).</li>
+    <li><strong>Independent model</strong> — an independent Python model written
+    written <em>from the spec</em>, not from the RTL, then cross-checked 0/162 against the
+    pinned <code>wsprcode</code>. Two derivations agreeing is evidence; one is hope.</li>
+    <li><strong>Adversarial review</strong> — the implementer never reviews their own block
+    (Agent E tries to break it; Agent G reviews it as course material).</li>
+    <li><strong>Decoder adjudication</strong> — the final judge: a standard decoder must decode
+    the chain (part 4; <a href="../docs/verification.md">verification.md</a>).</li>
+  </ol>
+  <div class="box story"><span class="tag">What the adversaries caught</span>
+  M1 (one-symbol tone skew — a decoder-fatal protocol bug), M5 (ready LED lit during calibration
+  error), the stale <code>architecture.md</code> tone grid (it documented the <em>old</em>, wrong
+  mapping), the non-compiling leftover <code>tb_top</code>, and a scheduler TB that passed but
+  was never run by <code>make sim</code>. None of these were found by the implementers.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 8 · Verification</div>
+  <h2>Testbench patterns that matter</h2>
+  <div class="cols">
+    <div>
+      <h3>The delta-cycle trap</h3>
+      <pre class="code"><span class="c"># Registered outputs read at the SAME clock edge
+# show the PREVIOUS value (delta-0 semantics):</span>
+wait until rising_edge(clk);
+<span class="k">if</span> rf_out = <span class="n">'1'</span> <span class="k">then</span> ...  <span class="c"># this is the OLD sample</span>
+
+<span class="c"># Sample one edge later, or use the event:</span>
+wait until rising_edge(clk);
+wait until rising_edge(clk);</pre>
+      <p>This caused several false testbench failures during development. It is VHDL's delta-cycle
+      model, not a bug — and knowing it is the difference between a TB that lies and one that
+      tests.</p>
+    </div>
+    <div>
+      <h3>Scale parameters, never logic</h3>
+      <p>Simulating 110.6 s at 12 MHz is 1.3 billion cycles. So the design makes
+      <strong>everything a generic</strong> (plan §21): the integration TB runs
+      <code>CLOCK_HZ = 12000</code>, <code>BAUD = 100</code>, a 10-bit NCO — the <em>functional
+      logic is identical</em>, only the numbers scale. The tone-identity check works precisely
+      because the scaled NCO makes each tone's edge count distinct (512·(1+2k) per symbol).</p>
+      <div class="box theory"><span class="tag">The negative paths are the product</span>
+      Missing PPS, out-of-bounds calibration, corrupt NMEA, reset during TX — each failure mode
+      of plan §31 has a testbench scenario. Untested failure handling is folklore.</div>
+    </div>
+  </div>
+  <div class="box practice"><span class="tag">Practice 8.1</span>
+  <code>make sim TB=tb_wspr_top</code> reads ~5 minutes of scaled time. Find its seven checks in
+  the header, then add an eighth: after the TX, verify <code>led2</code> returns ready (it is
+  already there — check 7). Read the M7 tone monitor process and explain the anchor choice.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 8 · Verification</div>
+  <h2>Proof by decoder: the crown of the evidence</h2>
+  <div class="cols">
+    <div>
+      <pre class="code">$ python3 tools/make_wspr_wav.py --start 1.0 \
+    --out /tmp/260101_0001.wav
+$ wsprd -v -f 10.140210 /tmp/260101_0001.wav
+0001   8 -0.0  10.141709  0  K1ABC FN42 37
+0001  12 -0.0  10.141710  0  K1ABC FN42 37
+0001  11  0.1  10.141710  0  K1ABC FN42 37</pre>
+      <p>A WAV built from the project's own golden chain, decoded by the pinned standard
+      decoder: <strong>the whole protocol stack is validated in one line of output</strong>
+      (full record: <a href="../docs/verification.md">verification.md</a> §2).</p>
+    </div>
+    <div>
+      <p>The same run adjudicated the <strong>TX-start timing</strong>: DT ≈ 0 for a TX placed at
+      1.000 s, DT ≈ +1.0 for 2.000 s — reproducing the frozen spec §7.3 experiment and settling,
+      with evidence, the “1 s vs 2 s” question that a stale source comment had muddied.</p>
+      <div class="box theory"><span class="tag">Lesson in one sentence</span>
+      When a comment and an experiment disagree, run the experiment — and leave the tool behind
+      so the next person can too (<code>tools/check_tone_order.py</code>,
+      <code>tools/make_wspr_wav.py</code> both exist because of arguments they ended).</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PART 9 ======================= -->
+<section class="slide" id="p9">
+  <div class="kicker">Part 9 · VHDL &amp; FPGA primer</div>
+  <h2>VHDL-93 in one slide</h2>
+  <pre class="code"><span class="k">library</span> ieee; <span class="k">use</span> ieee.std_logic_1164.<span class="k">all</span>; <span class="k">use</span> ieee.numeric_std.<span class="k">all</span>;
+
+<span class="k">entity</span> nco <span class="k">is</span>                       <span class="c">-- the interface (a “socket”)</span>
+  <span class="k">generic</span> ( ACCUMULATOR_BITS : <span class="n">positive</span> := 40 );  <span class="c">-- build-time knobs</span>
+  <span class="k">port</span> ( clk, rst : <span class="k">in</span> <span class="n">std_logic</span>;
+         increment : <span class="k">in</span> <span class="n">std_logic_vector</span>(ACCUMULATOR_BITS-1 <span class="k">downto</span> 0);
+         rf_out    : <span class="k">out</span> <span class="n">std_logic</span> );
+<span class="k">end entity</span> nco;
+
+<span class="k">architecture</span> rtl <span class="k">of</span> nco <span class="k">is</span>
+  <span class="k">signal</span> phase_acc : <span class="n">unsigned</span>(ACCUMULATOR_BITS-1 <span class="k">downto</span> 0) := (<span class="k">others</span> => <span class="n">'0'</span>);
+<span class="k">begin</span>
+  p : <span class="k">process</span> (clk)                <span class="c">-- runs when clk changes; flip-flops inferred</span>
+  <span class="k">begin</span>
+    <span class="k">if</span> <span class="k">rising_edge</span>(clk) <span class="k">then</span>
+      <span class="k">if</span> rst = <span class="n">'1'</span> <span class="k">then</span> phase_acc &lt;= (<span class="k">others</span> => <span class="n">'0'</span>);   <span class="c">-- synchronous reset</span>
+      <span class="k">else</span> phase_acc &lt;= phase_acc + <span class="n">unsigned</span>(increment);
+      <span class="k">end if</span>;
+    <span class="k">end if</span>;
+  <span class="k">end process</span> p;
+  rf_out &lt;= phase_acc(ACCUMULATOR_BITS-1);   <span class="c">-- concurrent: pure wiring</span>
+<span class="k">end architecture</span> rtl;</pre>
+  <div class="box theory"><span class="tag">The three habits this repo demands</span>
+  (1) Synchronous resets, one clock domain. (2) Named constants with provenance — no bare
+  literals (plan §6). (3) <code>--std=93</code> on every invocation; the strict sweep adds
+  <code>-fexplicit -Wbinding</code> and greps for VHDL-2008 constructs
+  (<code>process(all)</code>, <code>std.env</code>, protected types) that must not appear.
+  Book: Ashenden, <em>The Designer's Guide to VHDL</em>; Pong Chu, <em>FPGA Prototyping by
+  VHDL Examples</em> for the hands-on style.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 9 · VHDL &amp; FPGA primer</div>
+  <h2>Laboratories</h2>
+  <div class="cols">
+    <div>
+      <h3>Sim labs (no hardware)</h3>
+      <ol>
+        <li><strong>Heartbeat</strong>: change <code>HEARTBEAT_DIV2</code> to 3 000 000; predict,
+        then verify in <code>tb_wspr_top</code>.</li>
+        <li><strong>Quantization</strong>: in <code>tb_pps_measure</code>, make the PPS period
+        off by one cycle; confirm the measured value follows it exactly.</li>
+        <li><strong>Averaging</strong>: set <code>CALIBRATION_SECONDS = 1</code> vs 8; feed a
+        dithered clock; watch the spread shrink (but the bias stay).</li>
+        <li><strong>Folding</strong>: run <code>tools/check_tone_order.py</code>; then raise
+        <code>CARRIER_INCREMENT</code> until the tone order flips — find the fold boundary.</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Build &amp; decode labs</h3>
+      <ol start="5">
+        <li><strong>Bitstream</strong>: <code>make clean && make</code>; read
+        <code>icetime</code>'s report; find the critical path's clock frequency.</li>
+        <li><strong>Decoder</strong>: regenerate the WAV with <code>--start 1.5</code>; predict
+        the DT before running wsprd.</li>
+        <li><strong>Break it</strong>: in a scratch copy, re-introduce the M1 mux and watch
+        <code>tb_wspr_top</code>'s tone-identity check fail. Revert.</li>
+        <li><strong>Protocol paper trail</strong>: pick any constant in
+        <a href="../docs/spec.md">spec.md</a> and find its pinned citation. (Every one has
+        one.)</li>
+      </ol>
+      <div class="box warn"><span class="tag">Lab safety</span>
+      No lab above radiates anything. Hardware labs start at <code>docs/rf.md</code> §4's
+      dummy-load procedure.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PART 10 ======================= -->
+<section class="slide" id="p10">
+  <div class="kicker">Part 10 · References</div>
+  <h2>Books worth their shelf space</h2>
+  <div class="cols">
+    <div>
+      <h3>Signals &amp; DSP</h3>
+      <ul>
+        <li>Oppenheim &amp; Willsky, <em>Signals and Systems</em>, 2nd ed. — the foundations.</li>
+        <li>Lyons, <em>Understanding Digital Signal Processing</em>, 3rd ed. — sampling/aliasing
+        with the best pictures in print.</li>
+        <li>Smith, <em>The Scientist &amp; Engineer's Guide to DSP</em> —
+        <a href="https://www.dspguide.com/">free online</a>.</li>
+        <li>Rice, <em>Digital Communications: A Discrete-Time Approach</em> — the modern
+        discrete-time treatment; free PDF from the author (BYU).</li>
+      </ul>
+      <h3>Communications</h3>
+      <ul>
+        <li>Sklar, <em>Digital Communications: Fundamentals and Applications</em>, 2nd ed. —
+        clearest detection/FEC story.</li>
+        <li>Proakis &amp; Salehi, <em>Communication Systems Engineering</em>, 2nd ed. — the
+        rigorous reference.</li>
+        <li>Haykin, <em>Communication Systems</em>, 4th ed.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Radio &amp; RF practice</h3>
+      <ul>
+        <li>ARRL, <em>The ARRL Handbook for Radio Communications</em> — filters, bands, practice.</li>
+        <li>Hayward, Campbell &amp; Larkin, <em>Experimental Methods in RF Design</em> (EMRFD) —
+        homebrew transmitters and filters, the WSPR beacon's spiritual companion.</li>
+      </ul>
+      <h3>Digital design</h3>
+      <ul>
+        <li>Ashenden, <em>The Designer's Guide to VHDL</em>, 3rd ed.</li>
+        <li>Chu, <em>FPGA Prototyping by VHDL Examples</em>.</li>
+        <li>Harris &amp; Harris, <em>Digital Design and Computer Architecture</em> — best first
+        chapter on flip-flops and FSMs ever written.</li>
+      </ul>
+      <h3>WSJT canon</h3>
+      <ul>
+        <li>Taylor &amp; Franke's QEX articles on WSJT/WSPR and the WSJT-X User Guide
+        (<a href="https://wsjt.sourceforge.io/">wsjt.sourceforge.io</a>).</li>
+        <li>K9AN's decoder notes linked from the
+        <a href="https://www.physics.princeton.edu/pulsar/K1JT/">K1JT archive</a>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 10 · References</div>
+  <h2>Wikipedia reading path</h2>
+  <p>In teaching order — each article is a 10-minute stop that pays rent later:</p>
+  <div class="cols">
+    <div>
+      <ol>
+        <li><a href="https://en.wikipedia.org/wiki/Fourier_analysis">Fourier analysis</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem">Nyquist–Shannon sampling theorem</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Aliasing">Aliasing</a> ·
+            <a href="https://en.wikipedia.org/wiki/Nyquist_frequency">Nyquist frequency</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Zero-order_hold">Zero-order hold</a> ·
+            <a href="https://en.wikipedia.org/wiki/Quantization_(signal_processing)">quantization</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Direct_digital_synthesis">Direct digital synthesis</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Frequency-shift_keying">Frequency-shift keying</a> ·
+            <a href="https://en.wikipedia.org/wiki/Continuous-phase_modulation">continuous-phase modulation</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Matched_filter">Matched filter</a> ·
+            <a href="https://en.wikipedia.org/wiki/Eb/N0">E<sub>b</sub>/N₀</a> ·
+            <a href="https://en.wikipedia.org/wiki/Link_budget">link budget</a></li>
+      </ol>
+    </div>
+    <div>
+      <ol start="8">
+        <li><a href="https://en.wikipedia.org/wiki/Forward_error_correction">Forward error correction</a> ·
+            <a href="https://en.wikipedia.org/wiki/Convolutional_code">convolutional code</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Sequential_decoding">Sequential decoding</a> ·
+            <a href="https://en.wikipedia.org/wiki/Viterbi_algorithm">Viterbi algorithm</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Interleaving">Interleaving</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/WSPR_(amateur_radio)">WSPR (amateur radio)</a> ·
+            <a href="https://en.wikipedia.org/wiki/WSJT_(software)">WSJT</a> ·
+            <a href="https://en.wikipedia.org/wiki/Maidenhead_Locator_System">Maidenhead locator</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/GPS">GPS</a> ·
+            <a href="https://en.wikipedia.org/wiki/Pulse_per_second">pulse per second</a> ·
+            <a href="https://en.wikipedia.org/wiki/NMEA_0183">NMEA 0183</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Band-pass_filter">Band-pass filter</a> ·
+            <a href="https://en.wikipedia.org/wiki/Q_factor">Q factor</a> ·
+            <a href="https://en.wikipedia.org/wiki/Butterworth_filter">Butterworth</a> ·
+            <a href="https://en.wikipedia.org/wiki/Image_frequency">image frequency</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm">Bresenham's line algorithm</a> ·
+            <a href="https://en.wikipedia.org/wiki/FPGA">FPGA</a> ·
+            <a href="https://en.wikipedia.org/wiki/VHDL">VHDL</a></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 10 · References</div>
+  <h2>Pinned sources — the course's primary literature</h2>
+  <table>
+    <tr><th>Source</th><th>What it pins</th></tr>
+    <tr><td>WSJT-X <strong>2.7.0+repack-1</strong> (Debian apt; source via <code>apt-get source wsjtx</code>)</td>
+        <td>every protocol constant: polynomials, sync vector, interleaver, spacing, timing;
+        the <code>wsprd</code> decoder itself</td></tr>
+    <tr><td><code>doc/wspr_icebreaker_orchestrator_plan.md</code> §33/§28</td>
+        <td>the pedagogical mandate this course implements</td></tr>
+    <tr><td><code>docs/spec.md</code>, <code>docs/protocol.md</code>, <code>docs/rf.md</code>,
+        <code>docs/verification.md</code>, <code>docs/architecture.md</code>, <code>docs/gps.md</code></td>
+        <td>the frozen contracts and evidence of this repository</td></tr>
+    <tr><td>oss-cad-suite 2026-09-27 (Yosys/GHDL/nextpnr/icestorm) ·
+        <a href="https://icebreaker-fpga.org">icebreaker-fpga.org</a> ·
+        <a href="https://digilent.com/reference/pmod/pmodgps/start">PmodGPS reference</a> ·
+        <a href="https://www.latticesemi.com/en/Products/FPGAandCPLD/iCE40">iCE40UP5K data sheet</a></td>
+        <td>the toolchain and hardware truth</td></tr>
+  </table>
+  <div class="box cite"><span class="tag">Standing rule</span>
+  When this course, the RTL, and a pinned source disagree, the pinned source wins; when the
+  pinned source's comment and its executable disagree, the executable wins — and the discrepancy
+  gets documented (spec §7's stale-comment story is the canonical example).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Epilogue</div>
+  <h2>Where the story goes next</h2>
+  <p>Everything software-side is done and verified: 13/13 testbenches, a clean bitstream at
+  31.09 MHz, tone identity checked at integration, and the golden chain decoded by the pinned
+  <code>wsprd</code>. The remaining chapters need <strong>hardware</strong>:</p>
+  <ol>
+    <li><code>iceprog -t</code> meets the board (PENDING-HARDWARE, spec §16).</li>
+    <li>GPS bring-up: sentence inventory, 1PPS width, the ~2.8 V I/O levels.</li>
+    <li>The measured pin spectrum — and the filter that <code>docs/rf.md</code> promises.</li>
+    <li>A bench transmission into a dummy load, decoded exactly as in part 8.</li>
+    <li>And finally: a licensed operator, their own callsign, an antenna — and a
+    <strong>spot on WSPRnet</strong>. The success criterion, fulfilled.</li>
+  </ol>
+  <div class="box theory"><span class="tag">The last lesson</span>
+  This course taught one method: <em>pin the truth, test against it, and let adversaries read
+  your work</em>. Every artifact here — spec, RTL, testbench, tool, document — exists because
+  someone pinned a source and someone else tried to break it. That method outlives WSPR,
+  iCE40, and VHDL. Take it with you.</div>
+  <p style="margin-top:2rem;color:#5a5a52;font-style:italic">Start a real transmission:
+  <code>make clean && make</code> — then wait for an even minute.</p>
+</section>
+<div class="foot">
+  <span id="pos">slide 1</span><span class="sp"></span>
+  <button id="prev">← prev</button><button id="next">next →</button>
+</div>
+<script>
+(function(){
+  var s=[].slice.call(document.querySelectorAll('.slide')),i=0,bar=document.getElementById('bar'),
+      pos=document.getElementById('pos');
+  function show(n){i=Math.max(0,Math.min(s.length-1,n));
+    s.forEach(function(e,k){e.classList.toggle('active',k===i)});
+    pos.textContent='slide '+(i+1)+' / '+s.length;
+    bar.style.width=(100*(i+1)/s.length)+'%';}
+  function go(d){show(i+d)}
+  document.getElementById('next').onclick=function(){go(1)};
+  document.getElementById('prev').onclick=function(){go(-1)};
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(1);
+    else if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1);
+    else if(e.key==='Home')show(0); else if(e.key==='End')show(s.length-1);});
+  s.forEach(function(sec,k){sec.querySelectorAll('[href^="#"]').forEach(function(a){
+    a.addEventListener('click',function(){show(k+1)})})});
+  show(0);
+})();
+</script>
+</body>
+</html>

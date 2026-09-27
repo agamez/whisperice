@@ -5,6 +5,10 @@
 > testbench to run (`make sim TB=<name>`), and the observation to make — in a waveform viewer or
 > in the TB's PASS report. Work top to bottom: every lesson only needs the ones before it.
 >
+> **Slide-course version:** `docs/course.html` — a self-contained HTML deck covering the same
+> ground plus the underlying communication theory (sampling, aliasing, DDS, link budgets, filter
+> design), with graphics, labs and references. Open it in any browser (arrows to navigate).
+>
 > Constants you will meet are all cited in [`docs/spec.md`](spec.md) and
 > [`docs/protocol.md`](protocol.md); block contracts are in [`docs/architecture.md`](architecture.md)
 > and [`docs/gps.md`](gps.md).
