@@ -1,0 +1,105 @@
+# WSPR Type-1 golden test vector — BENCH/SIMULATION ONLY, NEVER RADIATE.
+# docs/spec.md section 15; plan section 0.1.
+#
+# Message:            "K1ABC FN42 37"
+# Project:            wspr-icebreaker (Agent E / Phase 16, plan section 20)
+# Model:              reference/wspr_reference.py (independent re-implementation)
+# Generation command: python3 reference/wspr_reference.py --vector "K1ABC FN42 37"
+# Cross-check:        python3 reference/wspr_reference.py --compare-wsprcode "K1ABC FN42 37"
+#                     -> 0/162 channel-symbol differences vs /usr/bin/wsprcode
+# Reference decoder:  /usr/bin/wsprcode, Debian package wsjtx 2.7.0+repack-1
+#                     (upstream WSJT-X 2.7.0, pinned per docs/spec.md section 1)
+# n (callsign, 28b) = 259047992 = 0x0F70C238
+# m (grid+pwr,22b)  = 2896997   = 0x2C3465
+#
+# Every value below was produced by the independent model from the frozen
+# constants in docs/spec.md sections 2-5 and then verified bit-for-bit against
+# the installed reference encoder. The model was NOT ported from WSJT-X.
+#
+# ---------------------------------------------------------------------------
+# RAW REFERENCE OUTPUT (verbatim `wsprcode` output, for provenance)
+# ---------------------------------------------------------------------------
+$ /usr/bin/wsprcode "K1ABC FN42 37"
+Message: K1ABC FN42 37         
+
+Source-encoded message, 50 bits:
+Hex:     F7 0C 23 8B 0D 19 40
+Binary:  11110111 00001100 00100011 10001011 00001101 00011001 01
+
+Data symbols:
+      1 1 0 0 1 0 0 0 0 0 1 0 0 1 0 1 1 1 0 0 0 1 1 1 0 1 1 1 1 0
+      1 0 0 0 1 1 0 0 1 1 1 1 0 0 1 1 1 1 0 0 0 1 1 1 1 0 0 1 1 0
+      1 1 0 1 1 1 0 1 1 0 1 0 1 0 0 1 0 0 1 0 1 0 1 1 0 1 1 0 0 1
+      1 1 1 0 1 1 1 0 1 0 1 0 1 0 0 0 1 1 0 1 0 0 0 1 1 1 0 1 1 0
+      1 0 1 1 1 0 1 1 1 0 0 0 0 0 0 1 1 0 0 1 1 1 1 1 1 0 1 1 1 1
+      1 1 1 1 1 0 0 1 0 1 1 1
+
+Sync symbols:
+      1 1 0 0 0 0 0 0 1 0 0 0 1 1 1 0 0 0 1 0 0 1 0 1 1 1 1 0 0 0
+      0 0 0 0 1 0 0 1 0 1 0 0 0 0 0 0 1 0 1 1 0 0 1 1 0 1 0 0 0 1
+      1 0 1 0 0 0 0 1 1 0 1 0 1 0 1 0 1 0 0 1 0 0 1 0 1 1 0 0 0 1
+      1 0 1 0 1 0 0 0 1 0 0 0 0 0 1 0 0 1 0 0 1 1 1 0 1 1 0 0 1 1
+      0 1 0 0 0 1 1 1 0 0 0 0 0 1 0 1 0 0 1 1 0 0 0 0 0 0 0 1 1 0
+      1 0 1 1 0 0 0 1 1 0 0 0
+
+Channel symbols:
+      3 3 0 0 2 0 0 0 1 0 2 0 1 3 1 2 2 2 1 0 0 3 2 3 1 3 3 2 2 0
+      2 0 0 0 3 2 0 1 2 3 2 2 0 0 2 2 3 2 1 1 0 2 3 3 2 1 0 2 2 1
+      3 2 1 2 2 2 0 3 3 0 3 0 3 0 1 2 1 0 2 1 2 0 3 2 1 3 2 0 0 3
+      3 2 3 0 3 2 2 0 3 0 2 0 2 0 1 0 2 3 0 2 1 1 1 2 3 3 0 2 3 1
+      2 1 2 2 2 1 3 3 2 0 0 0 0 1 0 3 2 0 1 3 2 2 2 2 2 0 2 3 3 2
+      3 2 3 3 2 0 0 3 1 2 2 2
+
+Decoded message: K1ABC FN42 37            ntype: 37
+# ---------------------------------------------------------------------------
+# INDEPENDENT MODEL SECTIONS
+# ---------------------------------------------------------------------------
+# message: K1ABC FN42 37
+# n = 259047992 (0x0F70C238)   m = 2896997 (0x2C3465)
+
+PAYLOAD BITS (50)
+hex:  F7 0C 23 8B 0D 19 40
+bits: 11110111 00001100 00100011 10001011 00001101 00011001 01
+
+FEC INPUT BITS (81)
+111101110000110000100011100010
+110000110100011001010000000000
+000000000000000000000
+
+CODED BITS (162)
+111011111000111001001101010101
+001010101110001101101100011111
+100111111110111010101101010100
+010001011110000001111111011010
+100011001111011011010101010110
+001101001111
+
+INTERLEAVED (162)
+110010000010010111000111011110
+100011001111001111000111100110
+110111011010100100101011011001
+111011101010100011010001110110
+101110111000000110011111101111
+111110010111
+
+SYNC (162)
+110000001000111000100101111000
+000010010100000010110011010001
+101000011010101010010010110001
+101010001000001001001110110011
+010001110000010100110000000110
+101100011000
+
+SYMBOLS (162)
+330020001020131222100323133220
+200032012322002232110233210221
+321222033030301210212032132003
+323032203020201023021112330231
+212221332000010320132222202332
+323320031222
+
+TONES (4 at RF = 10140200 Hz)
+tone 0: 10140197.802734375 Hz
+tone 1: 10140199.267578125 Hz
+tone 2: 10140200.732421875 Hz
+tone 3: 10140202.197265625 Hz
