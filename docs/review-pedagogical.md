@@ -176,9 +176,11 @@ plan §8 and not re-litigated in RTL.
 
 ## 7. Still open
 
-- Lessons 10–11 artifacts: Lesson 10's `docs/rf.md` has since been written (band selection, tone-
-  order rule, filter requirements); still open: a captured/simulated WAV + `wsprd`
-  adjudication record (`docs/verification.md`), `tools/inspect_wspr.py`, `docs/lab.md`.
+- Lessons 10–11 artifacts: `docs/rf.md` (band selection, tone-order rule, filter requirements)
+  and `docs/verification.md` (synthetic-WAV `wsprd` adjudication, reproducing spec §7.3) have
+  since been written, with `tools/check_tone_order.py` and `tools/make_wspr_wav.py`; still open:
+  the on-air spot + measured pin spectrum (PENDING-HARDWARE), `tools/inspect_wspr.py`,
+  `docs/lab.md`.
 - Hardware bring-up (PENDING-HARDWARE, spec §16): `iceprog -t` has never run against a board.
 - v1 gap (documented, deliberate): calibrated `cal_hz` is validated/frozen but the modulator
   increments are build-time constants (S6/§8 of `architecture.md`).

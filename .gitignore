@@ -20,5 +20,8 @@ work-obj*.cf
 .vscode/
 .idea/
 .DS_Store
+
+# Python bytecode (the tools import reference/wspr_reference.py)
+__pycache__/
 /tb_[a-z]*
 /tb_*_neg

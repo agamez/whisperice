@@ -207,19 +207,21 @@ placeholder).
 decodes a real transmission and the spot appears on WSPRnet (plan §26, §38). Decoder DT ≈ 0
 confirms the +1.000 s start offset; the decoded callsign/grid confirm the whole codec chain.
 
-**Read.** `docs/spec.md` §7.3, `docs/protocol.md` §6; `docs/verification.md` *(placeholder — to
-be written: the adjudication record format)*.
+**Read.** `docs/spec.md` §7.3, `docs/protocol.md` §6; `docs/verification.md` (the adjudication
+record).
 
-**Run.** No artifact yet. *To do*: capture a bench transmission (or simulate one from the golden
-tones into a WAV) and run `/usr/bin/wsprd <file.wav>`; record DT/SNR/callsign in
-`docs/verification.md`.
+**Run.**
+`python3 tools/make_wspr_wav.py --start 1.0 --out /tmp/260101_0001.wav` then
+`wsprd -v -f 10.140210 /tmp/260101_0001.wav` — the synthetic-WAV adjudication (§2 of
+`docs/verification.md`). The on-air version of this lesson needs the board (PENDING-HARDWARE).
 
-**Observe.** (Planned) decode of "K1ABC FN42 37" from a synthetic WAV at low SNR.
+**Observe.** `wsprd` decodes "K1ABC FN42 37" with DT ≈ 0.0 for a TX placed at 1.000 s (the
+frozen +1.000 s start, spec §7) and DT ≈ +1.0 when placed at 2.000 s.
 
 ---
 
 **Status after the pedagogical review (2026-09-27):** Lessons 1–9 are fully walkable with
-committed, passing testbenches (13/13 under `make sim`). Lesson 10 is walkable from the newly
-written `docs/rf.md` (its spectrum plot still needs a WAV capture). Lesson 11 needs the artifacts
-marked *to do* above (`docs/verification.md`, `tools/inspect_wspr.py`, a WAV capture) —
-tracked in `review-pedagogical.md` §7.
+committed, passing testbenches (13/13 under `make sim`). Lessons 10–11 are walkable from the
+written docs (`docs/rf.md`, `docs/verification.md`) and tools (`tools/check_tone_order.py`,
+`tools/make_wspr_wav.py`); the on-air spot and the measured pin spectrum remain
+PENDING-HARDWARE — tracked in `review-pedagogical.md` §7.

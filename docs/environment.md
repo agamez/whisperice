@@ -51,6 +51,12 @@
 | 14 | gcc (host compiler) | 14.2.0-19 | apt (preinstalled) | `gcc --version` | PASS |
 | 15 | libftdi1 (USB/FTDI runtime for iceprog) | 1.5-10 | apt | `dpkg -s libftdi1-2` | PASS |
 
+> **PATH caveat (numpy):** with the oss-cad-suite profile loaded (a login shell, `bash -lc`),
+> `/opt/oss-cad-suite/py3bin` shadows `/usr/bin/python3`, and that interpreter has **no numpy**.
+> Run the Python tools with the Debian interpreter explicitly (`/usr/bin/python3
+> tools/make_wspr_wav.py …`) or put `/usr/bin` first — the suite's `py3bin` is only needed for
+> Yosys/GHDL internals, not for the project tools.
+
 ---
 
 ## 3. Verification details
@@ -150,8 +156,7 @@ If `iceprog -t` still fails after attach:
 Created exactly as specified in the plan §27 "Recommended Repository Structure". (Historical note
 from setup time: the files started as **empty placeholders**; they have since been implemented by
 the phase agents — see `docs/architecture.md` §12 for the current status. Genuinely empty today:
-`src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/verification.md`,
-`docs/lab.md`.) The pre-existing `doc/` directory (orchestrator plan,
+`src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/lab.md`.) The pre-existing `doc/` directory (orchestrator plan,
 agent briefs, scoping decision) is a different, pre-existing directory and is left untouched;
 the plan-specified `docs/` directory exists alongside it.
 

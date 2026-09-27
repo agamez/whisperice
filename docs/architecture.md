@@ -257,14 +257,14 @@ symbols (`reference/README.md`; spec §2–§5). GPS/timing verification detail 
 
 - Calibration → increment datapath in RTL (§8 status): `cal_hz` is validated and frozen but the
   modulator increments are build-time generics.
-- `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/verification.md`,
-  `docs/lab.md` — 0-byte placeholders.
+- `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/lab.md` — 0-byte placeholders.
 - Hardware bring-up: no iCEBreaker was attached during environment setup (`docs/environment.md` §4).
   PENDING-HARDWARE items (spec §16): board revision, ~2.8 V GPS I/O levels, 1PPS pulse width, which
   NMEA sentences are actually emitted, FTDI/UART, RF pin ratification.
-- `docs/lessons.md` (plan §33 teaching walkthrough) is new; Lesson 11 (WSPRnet spotting) still
-  lacks its artifact (`docs/verification.md`, a captured WAV); `docs/rf.md` is now written
-  (band selection + filter requirements, measurement items PENDING-HARDWARE).
+- `docs/lessons.md` (plan §33 teaching walkthrough) is new; Lessons 10–11 are walkable:
+  `docs/rf.md` (band selection + tone-order rule) and `docs/verification.md` (the synthetic-WAV
+  `wsprd` adjudication, reproducing spec §7.3) are written; `docs/rf.md` measurement items and
+  the on-air spot remain PENDING-HARDWARE.
 
 ## 13. Sources
 
