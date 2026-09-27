@@ -234,6 +234,28 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   (plan §28). We will see why each law earns its keep.</div>
 </section>
 
+<!-- part 0 tour -->
+<section class="slide">
+  <div class="kicker">Part 0 · Orientation</div>
+  <h2>The tour: one even minute in the life</h2>
+  <p>Before any theory, here is the <em>whole story</em> — then the course explains each beat:</p>
+  <table>
+    <tr><th>UTC</th><th>What the silicon does</th><th>Blocks involved</th></tr>
+    <tr><td>:58 min</td><td>Scheduler leaves WAIT_SLOT → CALIBRATE; pulses <code>cal_start</code></td><td>FSM, calibration</td></tr>
+    <tr><td>:58–:59</td><td>Averages 8 one-second cycle counts; bounds-checks; freezes</td><td>pps_measure, clock_calibration</td></tr>
+    <tr><td>:59</td><td>READY (led2 lit); waits for <code>minute_even &amp; second=1</code></td><td>scheduler</td></tr>
+    <tr><td>even :01</td><td><code>tx_enable</code> pulse → accumulator starts from zero; tone 3 (sync)</td><td>modulator</td></tr>
+    <tr><td>:01–:52.6</td><td>162 symbols × 0.6827 s; codec vector walked symbol by symbol; phase never resets</td><td>codec + modulator</td></tr>
+    <tr><td>:52.6</td><td>RF off; TX_DONE → CALIBRATE (fresh calibration before the next TX)</td><td>FSM</td></tr>
+    <tr><td>meanwhile</td><td>A receiver 1000 km away correlates 110.6 s of noise and prints one line: <code>K1ABC FN42 37</code></td><td>wsprd (part 4)</td></tr>
+  </table>
+  <div class="box theory"><span class="tag">How the parts map to the beats</span>
+  Part 1 explains why a 1-bit pin can carry a 10 MHz carrier at all; part 2 the accumulator that
+  makes the tones; part 3 why 110.6 seconds beats a big amplifier; part 4 what the decoder needs
+  to find; parts 5–6 how the silicon produces it; part 7 what stands between pin and air; part 8
+  how we know it is correct.</div>
+</section>
+
 <!-- ======================= PART 1 ======================= -->
 <section class="slide" id="p1">
   <div class="kicker">Part 1 · Signals &amp; sampling</div>
@@ -267,6 +289,43 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
       the one chapter worth doing the problem sets for.</div>
     </div>
   </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 1 · Signals &amp; sampling</div>
+  <h2>Phase: the third coordinate</h2>
+  <p>A sinusoid is fully described by three numbers. Watch all three move:</p>
+  <div class="math">x(t) = A · sin(2π f t + φ)</div>
+  <figure>
+  <svg viewBox="0 0 900 210" role="img" aria-label="amplitude frequency phase">
+    <line x1="30" y1="105" x2="560" y2="105" stroke="#94a3b8"/>
+    <path d="M30,105 C70,25 110,25 150,105 S230,185 270,105 S350,25 390,105 S470,185 510,105 S550,60 560,70"
+          fill="none" stroke="#0e7490" stroke-width="2.5"/>
+    <path d="M30,105 C70,45 110,45 150,105 S230,165 270,105 S350,45 390,105 S470,165 510,105 S550,80 560,85"
+          fill="none" stroke="#b45309" stroke-dasharray="6 5" stroke-width="2"/>
+    <text x="40" y="20" font-size="11" fill="#0e7490">A=1.0</text>
+    <text x="40" y="60" font-size="11" fill="#b45309">A=0.6 (amplitude ↓)</text>
+    <circle cx="690" cy="105" r="60" fill="none" stroke="#cbd5e1"/>
+    <line x1="690" y1="105" x2="748" y2="70" stroke="#0e7490" stroke-width="2.5"/>
+    <line x1="690" y1="105" x2="727" y2="59" stroke="#b45309" stroke-dasharray="5 4" stroke-width="2"/>
+    <path d="M690,85 A20,20 0 0 1 704,92" fill="none" stroke="#334155"/>
+    <text x="700" y="185" font-size="11" fill="#475569">phasor view: phase = angle, f = rotation speed</text>
+  </svg>
+  <figcaption>Amplitude changes loudness; frequency changes pitch; <strong>phase is where in its
+  cycle the wave is</strong>. WSPR freezes amplitude, whispers between four frequencies, and
+  never lets phase jump — the decoder's correlation depends on it.</figcaption>
+  </figure>
+  <div class="box theory"><span class="tag">Why phase continuity is a contract</span>
+  A phase jump at a symbol boundary is, spectrally, a click — it splatters energy over
+  neighbouring tones exactly where the decoder is listening. This is why our RTL has ONE
+  accumulator for the whole 110.6 s transmission and symbol changes only swap the increment
+  (<a href="../src/wspr/wspr_modulator.vhd">wspr_modulator.vhd</a>). The protocol form is
+  <a href="https://en.wikipedia.org/wiki/Continuous-phase_modulation">continuous-phase
+  modulation</a>; the discipline is enforced by hardware.</div>
+  <div class="box practice"><span class="tag">Check yourself</span>
+  Two transmitters send the same tone sequence, but one resets its accumulator to zero at every
+  symbol boundary. Which one is decodable, and why does the other look like <em>four tones plus
+  broadband splatter</em>? (Answer at the end of part 6.)</div>
 </section>
 
 <section class="slide">
@@ -319,6 +378,33 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 1 · Signals &amp; sampling</div>
+  <h2>Aliasing by the numbers — with our actual carrier</h2>
+  <p>Take our 30 m carrier, f = 10 140 200 Hz, sampled at f<sub>s</sub> = 12 MHz. The sampler
+  keeps the phase of each sample: sample n has phase <span class="mono">(n·f) mod f<sub>s</sub></span>:</p>
+  <table>
+    <tr><th>n</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th></tr>
+    <tr><td>n·f mod 12 MHz (MHz)</td><td>10.1402</td><td>8.2804</td><td>6.4206</td><td>4.5608</td><td>2.7010</td><td>0.8412</td><td>10.9814</td><td>9.1216</td></tr>
+    <tr><td>folded to 0…6 MHz (MHz)</td><td>1.8598</td><td>3.7196</td><td>5.5794</td><td>4.5608</td><td>2.7010</td><td>0.8412</td><td>1.0186</td><td>2.8784</td></tr>
+    <tr><td>as a fraction of f<sub>s</sub></td><td>0.155</td><td>0.310</td><td>0.465</td><td>0.380</td><td>0.225</td><td>0.070</td><td>0.085</td><td>0.240</td></tr>
+  </table>
+  <p>Read the last row as a motion: the folded phase walks 0.845 → 0.690 → 0.535 → 0.380 → …
+  — <strong>decreasing by exactly 0.155 per sample</strong>. The ghost at 1.8598 MHz does not
+  just run slower — <em>it runs backwards</em>. That minus sign is not a curiosity:</p>
+  <div class="box warn"><span class="tag">The backward ghost is the tone-order rule</span>
+  Raise the carrier slightly (tone 0 → tone 1): the true phase rate goes 0.84502 → 0.84502+ε,
+  so the folded ghost rate goes 0.15498 → 0.15498−ε. <strong>The ghost's frequency moves the
+  opposite way.</strong> A receiver demodulating the fold hears the 4-FSK symbol grid
+  mirrored — tone 0 highest. This single table <em>explains</em> the tone-order rule of part 2
+  from first principles; <code>tools/check_tone_order.py</code> confirms it in spectrum.</div>
+  <div class="box theory"><span class="tag">The film waggon</span>
+  Why do wagon wheels in old films appear to spin backwards? The camera samples at 24 frames/s;
+  when a spoke rotates more than half a turn per frame, the wheel “folds” to a slower, reversed
+  motion — the same arithmetic as the table above, at 24 Hz
+  (<a href="https://en.wikipedia.org/wiki/Aliasing">aliasing</a>, the wagon-wheel effect).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 1 · Signals &amp; sampling</div>
   <h2>The pin is a 1-bit DAC: the zero-order hold</h2>
   <p>Our “transmitter output stage” is a logic pin: 0 V or 3.3 V, updated once per clock. In DSP
   language that is a <strong>1-bit zero-order-hold (ZOH) DAC</strong>
@@ -362,6 +448,48 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   with the best pictures in print. Smith's free
   <a href="https://www.dspguide.com/ch3.htm"><em>Guide to DSP</em>, ch. 3</a> covers the same
   ground with less math.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 1 · Signals &amp; sampling</div>
+  <h2>Quantization: the noise you cannot remove</h2>
+  <div class="cols">
+    <div>
+      <p>Representing a waveform with a finite word (here: <strong>one bit</strong>) adds an
+      irreducible error — <a href="https://en.wikipedia.org/wiki/Quantization_(signal_processing)">quantization
+      noise</a>:</p>
+      <ul>
+        <li>An N-bit DAC has ≈ 6.02·N + 1.76 dB of signal-to-quantization-noise ratio. One bit
+        ⇒ ~7.8 dB — terrible, if you wanted a clean waveform.</li>
+        <li>But the noise is <strong>broadband</strong>: it spreads over the whole spectrum. A
+        receiver looking at 6 Hz of bandwidth gets a processing advantage of 10·log₁₀(BW) over
+        the spread noise — the same maths as part 3's link budget.</li>
+        <li>This is precisely the logic of <a href="https://en.wikipedia.org/wiki/Delta-sigma_modulation">delta-sigma
+        converters</a>: coarse quantization + shaping + narrowband filtering. Our beacon is a
+        degenerate, beautiful case: 1 bit, no shaping, and the RF filter does the narrowing.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>So why is 1 bit enough <em>here</em>?</h3>
+      <ul>
+        <li>We transmit <strong>one tone at a time</strong> — no multi-tone sum needing
+        amplitude accuracy.</li>
+        <li>The decoder needs <em>frequency</em>, not amplitude: non-coherent 4-FSK detection
+        (part 3).</li>
+        <li>The information is spread over 110.6 s — quantization noise integrates out.</li>
+        <li>The pin already exists; a DAC costs money and pins (plan §18: the GPIO <em>is</em>
+        the carrier).</li>
+      </ul>
+      <div class="box warn"><span class="tag">What 1 bit costs you</span>
+      Broadband spurs at every m·f<sub>s</sub> ± f (part 2), a strong clock line, and harmonics
+      of the square wave. All of it is the <em>filter's</em> job (part 7) — none of it is
+      fixable in RTL, and none of it blocks a decode.</div>
+    </div>
+  </div>
+  <div class="box practice"><span class="tag">Check yourself</span>
+  A colleague proposes a 4-bit R-2R DAC on four GPIO pins for “a cleaner signal”. Give one
+  benefit and two reasons it does not help <em>decodability</em>. (Think: what does the decoder
+  actually measure, and what sets the decode floor?)</div>
 </section>
 
 <section class="slide">
@@ -422,6 +550,45 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 2 · Direct digital synthesis</div>
+  <h2>A toy accumulator you can count by hand</h2>
+  <p>Shrink the accumulator to <strong>N = 8 bits</strong> (wrap at 256) with increment
+  <strong>I = 29</strong>, clocked at f<sub>s</sub> = 256 Hz (one LSB = 1 Hz). Now every step is
+  visible:</p>
+  <table>
+    <tr><th>clock</th><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td></tr>
+    <tr><th>phase</th><td>0</td><td>29</td><td>58</td><td>87</td><td>116</td><td>145</td><td>174</td><td>203</td><td>232</td><td>5 (wrapped!)</td></tr>
+    <tr><th>MSB (≥128)</th><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>1</td><td>1</td><td>1</td><td>0</td></tr>
+  </table>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>The MSB goes high when phase crosses 128 — first at clock 5.</li>
+        <li>The phase wraps after ⌊256/29⌋+1 = 9 clocks — a full cycle every 256/29 s.</li>
+        <li>MSB period: high for 4–5 clocks, low for 4–5 — a square wave with
+        <strong>±1 clock of edge jitter</strong>, because 256/29 is not an even number of
+        clocks.</li>
+        <li>Frequency law check: f = 29/256 × 256 Hz = 29 Hz ✓ (the phase completes 29 wraps
+        per 256 clocks).</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">From toy to silicon</span>
+      The real <a href="../src/nco/nco.vhd">nco.vhd</a> is exactly this with N = 40 and I up to
+      2⁴⁰−1. Nothing else changes: same add, same wrap-by-truncation, same MSB. When a derivation
+      feels abstract, come back and re-run it at N = 8.</div>
+      <div class="box practice"><span class="tag">Practice 2.0</span>
+      By hand: N = 8, I = 64. (a) f<sub>out</sub>? (b) MSB waveform (duty cycle, jitter)?
+      (c) What special property does I = 64 = 2⁶ have? Then extend: which increments give
+      <em>zero</em> jitter, and what do they have in common? (Answers: (a) 64 Hz;
+      (b) exactly 50% duty, no jitter; (c) power of two — the phase hits 128 at the same
+      sub-clock offset every cycle; zero jitter ⟺ 2ᴺ/I is an integer, i.e. I is a power-of-two
+      divisor of 2ᴺ.)</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 2 · Direct digital synthesis</div>
   <h2>Folding: what the pin really does at 10.14 MHz</h2>
   <p>Our default carrier (10 140 200 Hz) is <strong>above Nyquist</strong> (6 MHz). The
   accumulator wraps faster than once per two clocks, so the pin pattern <em>looks</em> like a
@@ -455,6 +622,45 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   <span class="mono">F ≡ −f<sub>carrier</sub></span> carries them <strong>inverted</strong>.
   The fold is stronger but <em>undecodable</em>. “Never use the fold” —
   <a href="../docs/rf.md">docs/rf.md</a> §1, verified numerically.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 2 · Direct digital synthesis</div>
+  <h2>Where every image line lives</h2>
+  <p>For the 30 m carrier the analog output contains a line at <em>every</em>
+  <span class="mono">|m·12 MHz ± 1.8598 MHz|</span>. Compute them all once, own them forever:</p>
+  <table>
+    <tr><th>Line (MHz)</th><th>Origin</th><th>Tone order</th><th>Relative level (sinc est.)</th></tr>
+    <tr><td><strong>1.8598</strong></td><td>the fold itself (m = 0, −f<sub>c</sub>)</td><td><strong>inverted</strong></td><td>0 dB (strongest)</td></tr>
+    <tr><td><strong>10.1402</strong></td><td>12 − 1.8598 (m = 1, −f<sub>c</sub> side)</td><td><strong>correct</strong></td><td>−14.8 dB</td></tr>
+    <tr><td>13.8598</td><td>12 + 1.8598</td><td>inverted</td><td>−14.8 dB</td></tr>
+    <tr><td>22.1402</td><td>2·12 − 1.8598</td><td>correct</td><td>−20 dB (env.)</td></tr>
+    <tr><td>12.0000</td><td>the sampling clock</td><td>— (no modulation)</td><td>strong, unmodulated</td></tr>
+    <tr><td colspan="4">plus harmonics of the pattern and broadband quantization noise (part 1)</td></tr>
+  </table>
+  <div class="cols">
+    <div>
+      <p>Why does 12 − 1.8598 give the <em>correct</em> order while 12 + 1.8598 inverts?
+      Part 1's table showed the ghost's phase running <em>backwards</em>. A mirror at
+      <span class="mono">m·f<sub>s</sub></span> flips the direction once: the line at
+      <span class="mono">m·f<sub>s</sub> − f<sub>ghost</sub></span> un-flips it.</p>
+      <p>Rule of thumb to carry: <strong>a line at F behaves like +f<sub>c</sub> iff
+      F ≡ +f<sub>c</sub> (mod f<sub>s</sub>), and like −f<sub>c</sub> (mirrored) otherwise.</strong></p>
+    </div>
+    <div>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      The beacon is retuned to 80 m, 3 570 100 Hz — below Nyquist. (a) Which lines appear?
+      (b) Which are tone-correct? (c) Why is the filter's job now <em>easier</em>?
+      (Answers: (a) 3.5701 itself, 8.4299, 15.5701, 20.4299, 12 MHz, harmonics of 3.5701;
+      (b) every F ≡ +3.5701 mod 12 — including the direct fundamental, hence “direct” band;
+      (c) the wanted line is now the <em>strongest</em> spectral line and the 12 MHz clock is
+      8.4 MHz away.)</div>
+      <div class="box cite"><span class="tag">Repo</span>
+      <code>tools/check_tone_order.py</code> measures exactly this table from the real 40-bit
+      increments: fold/RF = +14.6 dB measured vs +14.75 dB sinc prediction. The <a href="../docs/rf.md">rf.md</a>
+      §2 band table lists the weight w for every candidate band.</div>
+    </div>
+  </div>
 </section>
 
 <section class="slide">
@@ -494,6 +700,40 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   </div>
 </section>
 
+<section class="slide">
+  <div class="kicker">Part 2 · Recap &amp; pitfalls</div>
+  <h2>Part 2 distilled</h2>
+  <div class="cols">
+    <div>
+      <h3>You can now…</h3>
+      <ul>
+        <li>Derive f = I·f<sub>s</sub>/2ᴺ and the resolution f<sub>s</sub>/2ᴺ from the toy
+        accumulator.</li>
+        <li>Predict every spectral line of the 1-bit output and its tone order.</li>
+        <li>Explain the fold's −15 dB and its direction reversal from one numeric table.</li>
+        <li>Read <a href="../src/nco/nco.vhd">nco.vhd</a> line by line and justify each comment.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Pitfalls this repo hit or dodged</h3>
+      <ul>
+        <li><strong>“The fold is the signal”</strong> — it is stronger but mirrored; the filter
+        must select the m·f<sub>s</sub> − f<sub>alias</sub> line (docs/rf.md §1).</li>
+        <li><strong>“Jitter is an error”</strong> — it is bounded (±1 clock), and the decoder
+        integrates thousands of clocks per symbol.</li>
+        <li><strong>“Bigger accumulator is always better”</strong> — resolution grows; so does
+        the adder's critical path. 40 bits is a frozen, cited decision (spec §8), not a
+        fashion.</li>
+        <li><strong>Dead constants</strong> that imply requirements (the NOMINAL_CLOCK_HZ
+        story) — documentation belongs in comments, not in unused code.</li>
+      </ul>
+      <div class="box practice"><span class="tag">Lab link</span>
+      Lab 4 (part 9) has you push the carrier through the fold and watch the tone order flip in
+      <code>tb_wspr_top</code>'s own check.</div>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= PART 3 ======================= -->
 <section class="slide" id="p3">
   <div class="kicker">Part 3 · Communication theory</div>
@@ -520,6 +760,46 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
       <p><a href="https://en.wikipedia.org/wiki/Minimum-shift_keying">MSK</a> is CPFSK with
       h = 0.5 (binary). WSPR is its 4-ary, slower cousin at h = 1 — same family, different
       constants, all cited in <a href="../docs/protocol.md">docs/protocol.md</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 3 · Communication theory</div>
+  <h2>The decibel, worked until it is boring</h2>
+  <p>Every link budget is six multiplications disguised as additions. Do this one slowly once,
+  and never fear dB again:</p>
+  <div class="cols">
+    <div>
+      <pre class="code"><span class="c"># thermal noise power in a bandwidth B, at 290 K</span>
+N_dBm = -174 + 10*log10(B_Hz)
+
+<span class="c"># B = 2500 Hz (the WSPR reference bandwidth)</span>
+10*log10(2500)   = 33.98 dB
+N_dBm            = -174.0 + 33.98 = -140.0 dBm
+
+<span class="c"># WSPR acceptance: signal 31 dB BELOW that noise</span>
+P_signal         = -140.0 - 31    = -171.0 dBm
+                 = 10^((-171-30)/10) W
+                 = 8 × 10⁻²¹ W
+
+<span class="c"># noise DENSITY (per 1 Hz): the reference for C/N0</span>
+N0               = -174.0 dBm/Hz
+C/N0             = P_signal - N0  = +3.0 dB·Hz</pre>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">Why dBm/Hz exists</span>
+      Noise power scales with bandwidth; dividing it out gives a property of the <em>receiver
+      input alone</em>. C/N₀ says “how much carrier per hertz of noise” — bandwidth-free, hence
+      the natural currency before you choose a detection bandwidth
+      (<a href="https://en.wikipedia.org/wiki/Signal-to-noise_ratio">SNR</a>,
+      <a href="https://en.wikipedia.org/wiki/Dbm">dBm</a>).</div>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      (a) A receiver's noise figure adds 6 dB: what is C/N₀ now? (b) The beacon on your desk
+      radiates −1 dBm into a dummy load; how far below kT-over-2.5 kHz is that? (Answers:
+      (a) +3 − 6 = −3 dB·Hz — the decode would fail; noise figure is why the <em>other</em>
+      station's receiver matters, not yours. (b) −1 vs −171 dBm: 170 dB of margin — desk
+      testing needs an attenuator, not courage.)</div>
     </div>
   </div>
 </section>
@@ -575,6 +855,87 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   </div>
 </section>
 
+<section class="slide">
+  <div class="kicker">Part 3 · Communication theory</div>
+  <h2>The matched filter, by hand</h2>
+  <p>Strip away the jargon: the matched filter asks, for each candidate tone, <em>“how much of
+  this exact wave is in my noisy recording?”</em> — multiply and add.</p>
+  <div class="cols">
+    <div>
+      <figure>
+      <svg viewBox="0 0 440 190" role="img" aria-label="correlation of tone vs noise">
+        <line x1="30" y1="60" x2="420" y2="60" stroke="#94a3b8"/>
+        <path d="M30,60 L50,40 L70,75 L90,35 L110,70 L130,30 L150,65 L170,45 L190,72 L210,38 L230,60 L250,55 L270,65 L290,42 L310,68 L330,50 L350,62 L370,40 L390,58 L410,55 L420,58"
+              fill="none" stroke="#cbd5e1" stroke-width="1.5"/>
+        <path d="M30,60 Q80,20 130,60 T230,60 T330,60 T420,60" fill="none" stroke="#0e7490" stroke-width="2.5"/>
+        <text x="35" y="25" font-size="11" fill="#0e7490">sent tone (period 6 samples)</text>
+        <text x="35" y="40" font-size="11" fill="#94a3b8">same tone buried in noise</text>
+        <line x1="30" y1="160" x2="420" y2="160" stroke="#94a3b8"/>
+        <g stroke="#b45309" stroke-width="3">
+          <line x1="60" y1="160" x2="60" y2="120"/><line x1="150" y1="160" x2="150" y2="142"/>
+          <line x1="240" y1="160" x2="240" y2="35"/><line x1="330" y1="160" x2="330" y2="140"/>
+        </g>
+        <text x="240" y="28" text-anchor="middle" font-size="11" fill="#b45309">correlator output: peak at the true tone</text>
+        <text x="60" y="112" text-anchor="middle" font-size="11" fill="#475569">tone A</text>
+        <text x="150" y="112" text-anchor="middle" font-size="11" fill="#475569">B</text>
+        <text x="240" y="112" text-anchor="middle" font-size="11" fill="#475569">C ✓</text>
+        <text x="330" y="112" text-anchor="middle" font-size="11" fill="#475569">D</text>
+      </svg>
+      <figcaption>Four correlators (one per tone), one symbol: the largest sum wins. Noise
+      averages towards zero; the tone adds coherently.</figcaption>
+      </figure>
+    </div>
+    <div>
+      <h3>Why integrate instead of average?</h3>
+      <p>Same thing, different scaling — the point is <strong>coherence</strong>: signal samples
+      add with their sign intact (amplitude × T), noise adds in root-T (σ × √T). The ratio grows
+      as √T — <strong>twice the integration, 3 dB better</strong>. WSPR integrates 110.6 s; that
+      is the whole magic of part 3, restated.</p>
+      <div class="box theory"><span class="tag">Book</span>
+      Sklar ch. 7 derives the matched filter from maximum likelihood; Lyons ch. 11 gives the
+      most intuitive pictures of correlation in print.</div>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      Why four correlators and not one? What would you correlate against for FSK with h = 0.5,
+      and why does that get harder as h shrinks? (The tones stop being orthogonal over one
+      symbol — the correlators' outputs start agreeing; that is MSK's coherence trade.)</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 3 · Recap &amp; pitfalls</div>
+  <h2>Part 3 distilled</h2>
+  <div class="cols">
+    <div>
+      <h3>You can now…</h3>
+      <ul>
+        <li>Run a complete link budget from kT to E<sub>b</sub>/N₀ and quote WSPR's numbers
+        (−140 dBm noise, −171 dBm signal, +3 dB·Hz, 0.4521 bit/s, 6.4 dB).</li>
+        <li>Say precisely why 110.6 s beats a big amplifier (54.4 dB of correlation gain).</li>
+        <li>Explain h = 1, non-coherent detection, and why phase continuity protects the
+        decoder.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Pitfalls</h3>
+      <ul>
+        <li><strong>Conflating SNRs</strong>: −31 dB is per 2.5 kHz of RF noise — not the
+        decoder's working SNR, and not per-symbol. Say the bandwidth or don't say the number.</li>
+        <li><strong>“More power fixes decoding”</strong>: 3 dB = 2× the transmitter; 3 dB =
+        waiting for a better minute. WSPR chose time — hardware can't buy back a wrong
+        architecture.</li>
+        <li><strong>Coherence confusion</strong>: the <em>tone</em> detection is non-coherent,
+        yet phase continuity still matters — it keeps each tone's energy on one line instead of
+        splattering it.</li>
+      </ul>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      The beacon doubles its clock to 24 MHz (same protocol). Which budget line changes, and by
+      how much? (None of the RF budget — only the phase-accumulator LSB halves: resolution 5.5 µHz.
+      The protocol constants live in symbol time, not clock rate. That is why generics scale.)</div>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= PART 4 ======================= -->
 <section class="slide" id="p4">
   <div class="kicker">Part 4 · The WSPR protocol</div>
@@ -622,6 +983,57 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>The signal, sample by sample</h2>
+  <p>Here is the beginning of the real golden transmission — the exact sequence this course's
+  beacon transmits (“K1ABC FN42 37”):</p>
+  <table>
+    <tr><th>symbol k</th><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+    <tr><th>tone (golden)</th><td>3</td><td>3</td><td>0</td><td>0</td><td>2</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td><td>2</td><td>0</td></tr>
+    <tr><th>audio (Hz)</th><td>1502.20</td><td>1502.20</td><td>1497.80</td><td>1497.80</td><td>1500.73</td><td>1497.80</td><td>1497.80</td><td>1497.80</td><td>1499.27</td><td>1497.80</td><td>1500.73</td><td>1497.80</td></tr>
+    <tr><th>holds for</th><td colspan="12">0.682667 s each (8192 samples at 12 kHz — exactly)</td></tr>
+  </table>
+  <figure>
+  <svg viewBox="0 0 900 170" role="img" aria-label="waterfall of first symbols">
+    <rect x="30" y="20" width="900" height="0" fill="none"/>
+    <g font-size="10" fill="#64748b" text-anchor="middle">
+      <text x="60" y="140">t=0</text><text x="870" y="140">110.6 s</text>
+    </g>
+    <line x1="30" y1="130" x2="880" y2="130" stroke="#334155"/>
+    <g stroke="#0e7490" stroke-width="6">
+      <line x1="40"  y1="45" x2="95"  y2="45"/>
+      <line x1="95"  y1="45" x2="150" y2="45"/>
+      <line x1="150" y1="95" x2="205" y2="95"/>
+      <line x1="205" y1="95" x2="260" y2="95"/>
+      <line x1="260" y1="65" x2="315" y2="65"/>
+      <line x1="315" y1="95" x2="370" y2="95"/>
+      <line x1="370" y1="95" x2="425" y2="95"/>
+      <line x1="425" y1="95" x2="480" y2="95"/>
+      <line x1="480" y1="80" x2="535" y2="80"/>
+      <line x1="535" y1="95" x2="590" y2="95"/>
+      <line x1="590" y1="65" x2="645" y2="65"/>
+      <line x1="645" y1="95" x2="700" y2="95"/>
+    </g>
+    <g stroke="#94a3b8" stroke-dasharray="3 4">
+      <line x1="40" y1="95" x2="700" y2="95"/>
+    </g>
+    <text x="710" y="99" font-size="10" fill="#64748b">1500 Hz centre</text>
+    <text x="710" y="49" font-size="10" fill="#0e7490">tone 3 = 1502.20 Hz</text>
+    <text x="710" y="69" font-size="10" fill="#0e7490">tone 2/1</text>
+    <text x="710" y="119" font-size="10" fill="#0e7490">tone 0 = 1497.80 Hz</text>
+    <text x="35" y="15" font-size="11" fill="#475569">a waterfall view: frequency (vertical) vs time (horizontal)</text>
+  </svg>
+  <figcaption>The first 12 symbols as a receiver's waterfall would draw them: a staircase of
+  4-FSK steps around the 1500 Hz audio centre. A real WSPR signal looks exactly this thin —
+  6 Hz of width in 2500 Hz of noise.</figcaption>
+  </figure>
+  <div class="box theory"><span class="tag">Why the staircase is centred</span>
+  Tones sit at 1500 ± 1.5·spacing and 1500 ± 0.5·spacing — the carrier is the grid <em>centre</em>
+  (spec §6). The decoder searches 1500 ± 110 Hz and finds the whole pattern with one
+  candidate offset, instead of four disjoint searches.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
   <h2>Type-1 message: 50 bits is enough</h2>
   <p>A WSPR message is a callsign, a 4-character Maidenhead grid, and a power in dBm — e.g.
   <strong>“K1ABC FN42 37”</strong> (37 dBm = 5 W). All of it fits in 50 bits:</p>
@@ -654,6 +1066,43 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   (A–R letters, digits) into 15 bits. Type-2 (prefix/suffix) and Type-3 (&lt;hash&gt;)
   messages exist in the protocol but are out of scope for this beacon
   (the model rejects them with a clear error).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>Packing “K1ABC”, digit by digit — with the golden answer</h2>
+  <p>Watch the mixed-radix machine grind. The callsign is first <em>left-aligned</em> to six
+  characters with a space: <code>"K1ABC "</code> (the space is the pad — short callsigns push
+  right). Character codes: space = 36, digits = 0–9, letters = 10–35:</p>
+  <table>
+    <tr><th>step</th><th>operation</th><th>value</th></tr>
+    <tr><td>seed</td><td>n = code(' ') = 36</td><td>36</td></tr>
+    <tr><td>×36 + code('K')=20</td><td>36·36 + 20</td><td>1 316</td></tr>
+    <tr><td>×10 + code('1')=1</td><td>10·1316 + 1</td><td>13 161</td></tr>
+    <tr><td>×27 + (code('A')−10)=0</td><td>27·13161 + 0</td><td>355 347</td></tr>
+    <tr><td>×27 + (code('B')−10)=1</td><td>27·355347 + 1</td><td>9 594 370</td></tr>
+    <tr><td>×27 + (code('C')−10)=2</td><td>27·9594370 + 2</td><td><strong>259 047 992</strong> = 0x0F70C238</td></tr>
+  </table>
+  <p>259 047 992 &lt; 2²⁸ = 268 435 456 ✓ — and it is <strong>bit-identical to the golden
+  vector's header</strong> (<code>n = 0x0F70C238</code>, spec §15). The grid+power packs the
+  same way into 22 bits: F=5, N=13, 4=4, 2=2 ⇒ m = ((179−54)·180+132)·128 + 37+64 =
+  <strong>2 896 997</strong> = 0x2C3465.</p>
+  <div class="cols">
+    <div>
+      <div class="box theory"><span class="tag">Why the −10s?</span>
+      The last three characters may be a letter <em>or a space</em> — 27 symbols, not 36. The
+      model subtracts 10 to fold letters (10–35) into 0–26; the space (36) folds to 26. Mixed
+      radixes are how the protocol squeezes structure for free.</div>
+    </div>
+    <div>
+      <div class="box practice"><span class="tag">Practice 4.2</span>
+      (a) Pack "DP0GVN" by hand (D=13, P=25, 0=0, G=16, V=31, N=23 — no padding needed).
+      (b) Verify with <code>python3 -c "import sys; sys.path.insert(0,'reference');
+      import wspr_reference as w; print(w.pack_callsign('DP0GVN'))"</code>.
+      (c) Explain to a friend why the pad space goes on the <em>left</em>, given the radix
+      order. (Hint: which end carries the big place value?)</div>
+    </div>
+  </div>
 </section>
 
 <section class="slide">
@@ -708,6 +1157,41 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>What the encoder actually outputs</h2>
+  <p>Follow the 50 payload bits through the pipeline — every number below is from the golden
+  vector, not an illustration:</p>
+  <div class="cols">
+    <div>
+      <table>
+        <tr><th>Stage</th><th>Size</th><th>Value (K1ABC FN42 37)</th></tr>
+        <tr><td>n (callsign)</td><td>28 bits</td><td>259 047 992 = 0x0F70C238</td></tr>
+        <tr><td>m (grid+power)</td><td>22 bits</td><td>2 896 997 = 0x2C3465</td></tr>
+        <tr><td>payload</td><td>50 bits</td><td>F7 0C 23 8B 0D 19 40</td></tr>
+        <tr><td>payload bits</td><td>50</td><td><span class="mono">11110111 00001100 00100011 10001011 00001101 00011001 01</span></td></tr>
+        <tr><td>+ tail zeros</td><td>+31 = 81</td><td>flush the 32-bit register to the known end state</td></tr>
+        <tr><td>conv. coded</td><td>162</td><td>POLY1 then POLY2 parity per input bit</td></tr>
+        <tr><td>interleaved</td><td>162</td><td>bit-reversal-with-carry permutation</td></tr>
+        <tr><td>+ sync → tones</td><td>162</td><td>tone = 2·data + sync → the staircase of the previous slide</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>The tail, and why 31 zeros matter</h3>
+      <p>The shift register must end where the decoder <em>knows</em> it ends — otherwise the
+      decoder must hypothesize 2³² ending states. K = 32 ⇒ 31 extra input bits (the first input
+      bit occupies the register at once) flush every payload bit out the far end. The tail costs
+      62 coded bits (38% of the frame!) and buys a decodable end state — the rate is honestly
+      50/162, and the budget of part 3 used exactly that.</p>
+      <div class="box theory"><span class="tag">Trellis in one breath</span>
+      A convolutional code is a walk on a graph whose nodes are register states; each input bit
+      moves you along a labelled edge (the two parity bits). Decoding = finding the most likely
+      walk. K = 32 ⇒ 2³¹ nodes — hence <em>sequential</em> decoding: walk greedily, backtrack
+      when the metric collapses (the Fano algorithm's “push your luck, then retreat” rule).</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
   <h2>Interleaving and the sync comb</h2>
   <div class="cols">
     <div>
@@ -751,6 +1235,40 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>Sync in action: what the decoder does with 63 marks</h2>
+  <div class="cols">
+    <div>
+      <p>The decoder slides a 162-symbol template over the received symbol stream — over time
+      (≈ ±5.4 s around the slot start) and frequency (±110 Hz) — and scores each offset by how
+      well the 63 marked positions land on odd tones:</p>
+      <ul>
+        <li><strong>Right time, right frequency</strong>: 63 of 63 sync symbols hit → enormous
+        correlation peak (they add coherently; the data symbols average out).</li>
+        <li><strong>Wrong by one symbol</strong>: many marks miss → the score collapses. The
+        comb is deliberately <em>non-periodic</em>, so no wrong offset pretends to fit.</li>
+        <li><strong>Partial overlap</strong> (TX started near the file edge): the decoder
+        tolerates missing symbols by scoring them as soft “no opinion” values —
+        <code>wsprd.c</code>'s “partial decoding”, documented at the sync-search comment.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Then 162 one-symbol decisions</h3>
+      <p>With the offset locked, each symbol's 0.6827 s of samples are reduced to four numbers
+      (energy per tone — the four correlators of part 3), mapped to a soft symbol value 0…3 plus
+      a confidence. That stream feeds the sequential decoder, which reconstructs the 50-bit
+      payload and — if the tail state and checksum agree — the message. The whole decode is two
+      passes: decode, <em>subtract</em>, decode again.</p>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      Why is the sync <em>interleaved</em> with the data instead of prepended as a header?
+      (Three reasons: it spreads timing information over the whole frame so drift can be
+      tracked continuously; a header would be a single point of failure; and interleaving the
+      marks keeps the data's burst-error protection intact.)</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
   <h2>Inside wsprd: the decoder in five moves</h2>
   <p>All of this is in the pinned source you have (<code>lib/wsprd/wsprd.c</code>):</p>
   <ol>
@@ -774,6 +1292,41 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   <a href="../docs/verification.md">docs/verification.md</a> §2, and
   <code>tools/make_wspr_wav.py</code> regenerates it. Run it, then find the same five moves in
   <code>wsprd.c</code>.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 4 · The WSPR protocol</div>
+  <h2>Anatomy of a decode line</h2>
+  <p>The project's acceptance criterion, in one line of output. From the real adjudication run
+  (<a href="../docs/verification.md">verification.md</a> §2):</p>
+  <pre class="code">0001   8 -0.0  10.141710  0  K1ABC FN42 37
+<span class="c">└┬─┘ └┬┘ └┬─┘ └───┬────┘ └┬┘ └───────┬──────┘</span>
+ <span class="c">│    │   │      │       │        └─ the decoded message (callsign, grid, dBm)</span>
+ <span class="c">│    │   │      │       └─ drift: Hz/min (0 — we modeled none)</span>
+ <span class="c">│    │   │      └─ reported RF = dial (10.140210) + measured audio ≈ +1.5 kHz</span>
+ <span class="c">│    │   └─ DT: signal start vs nominal slot start (≈ 0 ↔ TX at 1.000 s, spec §7)</span>
+ <span class="c">│    └─ sync strength, dB above the decoder's threshold</span>
+ <span class="c">└─ HHMM parsed from the FILE NAME (wsprd.c:966) — synthetic in our test</span></pre>
+  <div class="cols">
+    <div>
+      <div class="box theory"><span class="tag">Why DT is the timing certificate</span>
+      The decoder's search grid is anchored at the nominal slot start. A beacon that transmits
+      at second 1.000 produces DT ≈ 0; at 2.000 s, DT ≈ +1.0 — measured in
+      <a href="../docs/verification.md">verification.md</a>, and that experiment is how spec §7
+      froze <code>+1.000 s</code> against the stale “2 s” comment. <strong>DT is the scheduler's
+      report card.</strong></div>
+    </div>
+    <div>
+      <div class="box practice"><span class="tag">Practice 4.3</span>
+      Run the two-WAV experiment yourself (commands in verification.md §2). Then perturb one
+      thing: generate with <code>--start 1.2</code>. Predict DT. Confirm. You have now
+      personally calibrated the decoder's clock reference.</div>
+    </div>
+  </div>
+  <div class="box cite"><span class="tag">On WSPRnet</span>
+  A real spot carries the same fields plus callsign hashes and reporting-station data. When the
+  beacon eventually appears there (plan §38), the line will look exactly like this — except the
+  first column will be a real UTC minute, and the message will be a licensed operator's.</div>
 </section>
 
 <!-- ======================= PART 5 ======================= -->
@@ -882,6 +1435,46 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>NMEA anatomy, and the checksum worked</h2>
+  <p>The sentence the parser must accept — the same one every testbench and the golden workflow
+  use:</p>
+  <pre class="code">$ G P R M C , 1 2 3 5 1 9 , A * 0 7  ⏎
+└──────────┬──────────┘ │ │  └┬┘
+   address field        │ │   └─ checksum: XOR of every char between $ and *
+              time 12:35:19 ┘ └─ status: A = valid fix, V = warning (fix lost)</pre>
+  <div class="cols">
+    <div>
+      <h3>The checksum, honestly computed</h3>
+      <p>XOR every ASCII byte of <code>GPRMC,123519,A</code> (delimiters excluded):</p>
+      <pre class="code">G ^ P ^ R ^ M ^ C ^ , ^ 1 ^ 2 ^
+3 ^ 5 ^ 1 ^ 9 ^ , ^ A = 0x07</pre>
+      <p>The parser folds each incoming byte into an 8-bit accumulator
+      (<code>checksum &lt;= checksum xor data(6 downto 0)</code> — bit 7 is dropped, ASCII keeps
+      it zero) and compares against the two hex digits after <code>*</code>. Commit happens
+      <strong>only at the CRLF</strong> — a sentence is a unit or it is nothing.</p>
+    </div>
+    <div>
+      <h3>Why commit-at-end is a lesson</h3>
+      <ul>
+        <li>A corrupted byte anywhere invalidates the <em>whole</em> sentence — but the already
+        committed time stays untouched (plan §31: corrupt NMEA never changes valid time).</li>
+        <li>The state machine (IDLE → BODY → CHK1 → CHK2 → COMMIT) accepts only
+        <code>$--RMC</code> addresses, matched literally (review S2 removed the
+        indirection that hid this).</li>
+        <li>Review S8: a stream without CRLF swallows the next sentence's <code>$</code> — the
+        commit state now re-arms on <code>$</code>. Every fix traces to a finding.</li>
+      </ul>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      Why does the parser require <em>exactly six</em> time digits in field 2? (Hint: RMC also
+      carries <code>hhmmss.ss</code> — the parser accepts the fractional form's leading six and
+      ignores the rest; anything else in the first six is rejected. Time is load-bearing;
+      latitude is not.)</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
   <h2>Measuring your own clock against the GPS second</h2>
   <p><a href="../src/gps/pps_measure.vhd">pps_measure.vhd</a> counts clock cycles between 1PPS
   rising edges. Two details make it correct:</p>
@@ -916,6 +1509,44 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
       (11 988 000…12 012 000), out-of-bounds ⇒ <code>calibration_error</code> +
       <code>calibration_valid='0'</code> ⇒ no transmit (plan §31). The value freezes for the
       whole transmission and is re-measured before the next one (plan §7).</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>Calibration, worked with numbers</h2>
+  <p>Suppose the real oscillator is 12 000 012 Hz (a plausible crystal) and quantization dithers
+  each 1PPS count by ±1. Eight seconds of measurement might read:</p>
+  <div class="math">11 999 998 &nbsp; 12 000 012 &nbsp; 12 000 013 &nbsp; 12 000 011 &nbsp;
+  12 000 012 &nbsp; 11 999 999 &nbsp; 12 000 012 &nbsp; 12 000 014</div>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><strong>Average</strong> = 96 000 071/8 = 12 000 008.875 → round-half-up ⇒
+        <strong>12 000 009 Hz</strong>.</li>
+        <li><strong>Error vs nominal</strong>: +9/12 000 000 = +0.75 ppm — inside the ±1000 ppm
+        bounds (11 988 000…12 012 000), so <code>calibration_valid='1'</code>.</li>
+        <li><strong>Effect on the RF carrier</strong>: +0.75 ppm × 10 140 200 Hz = +7.6 Hz of
+        dial error — the decoder's ±110 Hz search eats it easily. Effect on the <em>tone
+        spacing</em>: +0.75 ppm × 1.4648 Hz = +1.1 µHz — nothing. <strong>Absolute error
+        searches; relative error destroys.</strong> The clock error is almost all absolute.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Then freeze it</h3>
+      <p>The averaged value is frozen (<code>calibration_frozen</code>) for the whole
+      transmission — recalibrating mid-TX would shift tones mid-symbol. After TX_DONE, the FSM
+      returns to CALIBRATE: a fresh measurement precedes every transmission (plan §7).</p>
+      <div class="box warn"><span class="tag">Out of bounds?</span>
+      If the average misses the bounds (say a 12.5 MHz clock), <code>calibration_error</code>
+      and <code>calibration_frozen</code> assert <strong>together</strong>, valid stays low, the
+      scheduler re-pulses <code>cal_start</code>, and nothing transmits. The M5 LED bug lived
+      exactly in this corner.</div>
+      <div class="box practice"><span class="tag">Practice 5.2</span>
+      In <code>tb_clock_calibration</code>, find the bound check scenario. Compute by hand what
+      the average of its synthetic measurements will be <em>before</em> running; then run and
+      compare against the TB's PASS report.</div>
     </div>
   </div>
 </section>
@@ -963,6 +1594,42 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   one”). Students hunt for the missing assignment. The review replaced it with a plain comment;
   the decision — an RF cut mid-symbol would harm the decode more than the missing second — is
   now where a reader looks for it.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 5 · The beacon architecture</div>
+  <h2>The handshake, clock cycle by clock cycle</h2>
+  <p>The scheduler–calibration conversation is the best small example of FPGA thinking. Six
+  clock edges, no ambiguity:</p>
+  <table>
+    <tr><th>edge</th><th>who acts</th><th>what happens</th></tr>
+    <tr><td>0</td><td>scheduler</td><td>enters CALIBRATE; <code>cal_start</code> ← 1 (registered output)</td></tr>
+    <tr><td>1</td><td>calibration</td><td><em>samples</em> <code>cal_start='1'</code> (delta-0: still the old value — the one written at edge 0); window opens, <code>cal_start</code> ← 0</td></tr>
+    <tr><td>2…N</td><td>calibration</td><td>accumulates valid 1PPS measurements</td></tr>
+    <tr><td>N+1</td><td>calibration</td><td>window complete: <code>cal_valid</code> ← 1 (frozen value present)</td></tr>
+    <tr><td>N+2</td><td>scheduler</td><td><em>samples</em> <code>cal_valid='1'</code> — a <strong>fresh rising edge</strong> — enters READY</td></tr>
+    <tr><td>later</td><td>scheduler</td><td>WAIT_SLOT fires <code>tx_enable</code>; modulator starts at the next edge</td></tr>
+  </table>
+  <div class="cols">
+    <div>
+      <div class="box theory"><span class="tag">Why EDGES, not levels</span>
+      A level says “calibration is currently valid”; only an edge says “a <em>new</em>
+      calibration just completed”. A scheduler that accepted levels could enter READY on a
+      stale success from an hour ago — the exact failure class the M5 LED bug and the S9
+      documentation issue live in. The handshake costs one extra cycle and buys an unforgeable
+      “freshness” certificate.</div>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">And the delta-0 note</span>
+      Row “edge 1” is the testbench trap of part 8 in miniature: a process sampling
+      <code>cal_start</code> <em>at the same edge</em> that wrote it reads the previous value.
+      Designers must reason about which edge each consumer sees — the course's recurring
+      theme.</div>
+      <div class="box practice"><span class="tag">Practice 5.3</span>
+      In <code>tb_wspr_scheduler</code>, find the test that proves a stale <code>cal_valid</code>
+      cannot re-enter READY. Write down its stimulus in the six-row table above.</div>
+    </div>
+  </div>
 </section>
 
 <section class="slide">
@@ -1034,6 +1701,42 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 6 · The modulator</div>
+  <h2>The 130 ns multiply — thinking like synthesis</h2>
+  <p>A first-draft modulator wrote <code>phase_increment = CARRIER + TONE_INCREMENT * symbol</code>
+  — one line of VHDL, and a timing bomb:</p>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><code>TONE_INCREMENT</code> is 40 bits; <code>symbol</code> is 2 bits. A combinational
+        40×2 multiply is a <em>chain</em> of partial-product additions: ≈ 130 ns on this fabric —
+        while the clock period is <strong>83.3 ns</strong>. The design would not close timing at
+        any clock above ~7.7 MHz.</li>
+        <li>The fix that costs nothing: the symbol takes only four values, so precompute the four
+        sums at <em>build time</em> and let a 4-way multiplexer pick one:
+        <code>INC_T0..INC_T3</code>. Multiplication collapses into selection — ~2 ns through one
+        LUT level plus routing.</li>
+        <li>The build-time constants come from
+        <code>tools/calculate_nco.py</code>, with the +1 LSB rounding note for HALF_TONE
+        (2·67109 = 134218 vs 134217).</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">The general lesson</span>
+      On an FPGA, <em>expression</em> and <em>cost</em> are different things. A one-line
+      arithmetic statement synthesizes into real gates with real propagation delay. The
+      craft is spotting which computations are (a) constant-folding candidates, (b) worth
+      pipelining, (c) worth replacing with a table. Here: (a), obviously, in hindsight — and in
+      foresight once you have seen one multiply ruin a timing report.</div>
+      <div class="box cite"><span class="tag">Repo</span>
+      The centered-grid derivation and the 130 ns note live in the
+      <a href="../src/wspr/wspr_modulator.vhd">wspr_modulator.vhd</a> header; the increments'
+      provenance prints from <code>tools/calculate_nco.py</code> for any carrier.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 6 · The modulator</div>
   <h2>Symbol timing: the Bresenham trick</h2>
   <p>The symbol duration is <span class="mono">CLOCK_HZ · 8192 / 12000</span> cycles — not an
   integer for a real (calibrated) clock. The modulator splits it exactly:
@@ -1072,6 +1775,47 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
       <div class="box practice"><span class="tag">Practice 6.1</span>
       <code>make sim TB=tb_wspr_modulator</code> — Run B checks the fractional accumulator:
       every length ∈ {8192, 8193} <em>and</em> the total within 1 cycle of the ideal.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 6 · The modulator</div>
+  <h2>Bresenham, worked: the clock that is 12 001 Hz</h2>
+  <p>Real clocks are not exactly 12 MHz. Take CLOCK_HZ = 12 001: WHOLE = 8192, REM = 8192, and
+  every symbol boundary runs this recurrence (err starts at 0):</p>
+  <div class="math">err_v = (err + REM) mod 12000 &nbsp;&nbsp;·&nbsp;&nbsp;
+  length = 8192 + [err_v ≥ 12000 − 8192 = 3808]</div>
+  <table>
+    <tr><th>boundary k</th><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td></tr>
+    <tr><th>err_v</th><td>8192</td><td>4384</td><td>576</td><td>8768</td><td>4960</td><td>1152</td><td>9344</td><td>5536</td><td>1728</td></tr>
+    <tr><th>length</th><td>8193</td><td>8193</td><td>8192</td><td>8193</td><td>8193</td><td>8192</td><td>8193</td><td>8193</td><td>8192</td></tr>
+  </table>
+  <div class="cols">
+    <div>
+      <p>A perfect <strong>two-long-one-short rhythm</strong>. Check the average:
+      (2·8193 + 8192)/3 = 24 578/3 = 8192.667 — exactly
+      <span class="mono">12001·8192/12000</span>. The rhythm exists because REM/DEN =
+      8192/12000 ≈ 0.6827, so ~68% of symbols take the extra cycle — and the error state makes
+      the pattern <em>deterministic and drift-free</em>, repeating every
+      12000/gcd(8192,12000) = <strong>375 symbols</strong> (256 long + 119 short — the ratio
+      256/375 is exactly REM/DEN).</p>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">Where the +1 goes is not arbitrary</span>
+      The error updates <em>before</em> the threshold test — so the decision uses
+      <span class="mono">(k+1)·REM mod DEN</span>, the remainder of the <em>entering</em>
+      symbol. Do it in the other order and the first symbol's correction lands one symbol
+      late: a 1-cycle phase step at a random boundary — audible to the sync search as timing
+      noise. The comment in <a href="../src/wspr/wspr_modulator.vhd">wspr_modulator.vhd</a>
+      says exactly this; now you know why.</div>
+      <div class="box practice"><span class="tag">Practice 6.2</span>
+      Compute CLOCK_HZ = 12 000 003 by hand: WHOLE = 8 192 002, REM = 576, DEN − REM = 11 424.
+      What are the first four symbol lengths, and at which boundary does the first extra cycle
+      appear? (Answers: 8 192 002 for k = 1…19; the first 8 192 003 lands at k = 20, where
+      20·576 = 11 520 ≥ 11 424. Verify the mechanism with Run B of
+      <code>tb_wspr_modulator</code>, which checks every length against the exact split and the
+      162-symbol total against the ideal within 1 cycle.)</div>
     </div>
   </div>
 </section>
@@ -1119,6 +1863,41 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   ownership deletes them.</div>
 </section>
 
+<section class="slide">
+  <div class="kicker">Part 6 · The modulator</div>
+  <h2>Regression armor, dissected: the M7 tone check</h2>
+  <p>The integration test that would have caught M1 works by making tone classes
+  <em>countable</em>. With the scaled NCO (10-bit accumulator, CARRIER = 256, HALF = 64), tone k
+  uses increment 64 + 128·k, and one 8192-cycle symbol advances the phase by exactly
+  <span class="mono">8192·inc/1024 = 8·inc</span> whole wraps — an integer! Therefore:</p>
+  <div class="math">rising edges per symbol = 8 · inc(k) = 512 + 1024·k
+  ⇒ 512, 1536, 2560, 3584 — four classes, thousands apart</div>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>The testbench counts rising edges per symbol window and compares against
+        <code>TONE_GOLDEN(k)</code> — all 162 of them (±2 for the anchored first and gated last
+        window).</li>
+        <li>A one-symbol skew compares symbol k against golden k−1. Since <em>consecutive</em>
+        golden tones differ by ≥ 1024 edges, any skew fails loudly.</li>
+        <li>The total transition count is also checked exactly: 679 935 measured vs 679 936
+        expected.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">Why the skew is now impossible, not just detected</span>
+      Tests catch instances; structure removes classes. The modulator owning the symbol counter
+      eliminates the whole category of scheduler↔modulator alignment bugs — the test remains as
+      a tripwire for a <em>different</em> future mistake (e.g. a broken codec vector order).
+      Defense in depth: structure first, test second.</div>
+      <div class="box practice"><span class="tag">Practice 6.3</span>
+      In <code>tb_wspr_top</code>, find the anchor choice of the tone monitor (first
+      <code>rf_out</code> rise) and explain why windows 0 and 161 get a ±2 tolerance while the
+      middle ones would need only ±1. (Hint: part 8's delta-cycle trap plus the RF gate.)</div>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= PART 7 ======================= -->
 <section class="slide" id="p7">
   <div class="kicker">Part 7 · The RF chain</div>
@@ -1156,6 +1935,49 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
       (plan §25). The default slot mask transmits every even minute — reduce it before any OTA.</div>
     </div>
   </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 7 · The RF chain</div>
+  <h2>The spectrum, end to end — what leaves the box</h2>
+  <p>Everything the pin emits for an 80 m carrier (3 570 100 Hz direct, strongest case), with
+  the filter's marching orders:</p>
+  <figure>
+  <svg viewBox="0 0 900 260" role="img" aria-label="full transmit spectrum">
+    <line x1="40" y1="210" x2="880" y2="210" stroke="#334155"/>
+    <line x1="40" y1="20" x2="40" y2="210" stroke="#334155"/>
+    <g stroke="#0e7490">
+      <line x1="95"  y1="210" x2="95"  y2="55" stroke-width="6"/>
+      <line x1="700" y1="210" x2="700" y2="150" stroke-width="4"/>
+      <line x1="840" y1="210" x2="840" y2="140" stroke-width="4"/>
+    </g>
+    <line x1="470" y1="210" x2="470" y2="60" stroke="#b91c1c" stroke-width="6"/>
+    <path d="M60,208 C160,205 260,196 330,120 C360,85 390,80 420,80 C460,80 500,85 540,120 C610,196 760,205 875,208"
+          fill="none" stroke="#15803d" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="95" y="45" text-anchor="middle" font-size="12" fill="#0e7490" font-weight="bold">3.5701 MHz</text>
+    <text x="95" y="60" text-anchor="middle" font-size="10" fill="#0e7490">fundamental (direct)</text>
+    <text x="95" y="73" text-anchor="middle" font-size="10" fill="#0e7490">tone order CORRECT</text>
+    <text x="330" y="140" text-anchor="middle" font-size="10" fill="#64748b">(no 2f: odd symmetry)</text>
+    <text x="470" y="50" text-anchor="middle" font-size="12" fill="#b91c1c" font-weight="bold">12 MHz clock feedthrough</text>
+    <text x="470" y="63" text-anchor="middle" font-size="10" fill="#b91c1c">strong, unmodulated — pure interference</text>
+    <text x="700" y="140" text-anchor="middle" font-size="11" fill="#64748b">10.71 (3f harmonic)</text>
+    <text x="840" y="130" text-anchor="middle" font-size="11" fill="#64748b">17.85 (5f)</text>
+    <line x1="260" y1="20" x2="260" y2="210" stroke="#94a3b8" stroke-dasharray="2 5"/>
+    <line x1="580" y1="20" x2="580" y2="210" stroke="#94a3b8" stroke-dasharray="2 5"/>
+    <text x="270" y="30" font-size="10" fill="#94a3b8">← must reject</text>
+    <text x="590" y="30" font-size="10" fill="#94a3b8">must reject →</text>
+    <text x="380" y="245" font-size="11" fill="#475569">frequency → (log-ish scale, 0–20 MHz)</text>
+  </svg>
+  <figcaption>The green dashed curve is the band-pass filter's response. Everything that is not
+  the fundamental — clock line, harmonics, images, broadband quantization noise — must fall
+  inside its skirts. For 30 m the same picture gets harder: the clock line moves to 1.86 MHz
+  from the carrier (docs/rf.md §5).</figcaption>
+  </figure>
+  <div class="box theory"><span class="tag">Reading a square wave's spectrum</span>
+  A 50%-duty square wave has only <strong>odd</strong> harmonics (3f, 5f, 7f…), each falling as
+  1/n — Fourier's original example. Our 4-FSK modulates that square wave's <em>frequency</em>,
+  so each harmonic becomes a tiny FSK signal too: the 3rd harmonic of an 80 m beacon is itself a
+  (weak, drifting) 10.71 MHz WSPR signal. Filters exist so nobody ever hears it.</div>
 </section>
 
 <section class="slide">
@@ -1204,6 +2026,65 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
 
 <section class="slide">
   <div class="kicker">Part 7 · The RF chain</div>
+  <h2>A 2-pole band-pass, fully worked</h2>
+  <p>Target: pass 3 570 100 Hz (80 m) with ~100 kHz of bandwidth; reject the 12 MHz clock line
+  and the 3f harmonic at 10.71 MHz. Topology: two resonators — series LC (short at resonance)
+  then shunt LC (open at resonance):</p>
+  <div class="cols">
+    <div>
+      <pre class="code"><span class="c"># 1. Loaded Q from the bandwidth</span>
+Q = f0 / BW = 3 570 100 / 100 000 = 35.7
+
+<span class="c"># 2. Choose L = 1 µH (a chunky, low-loss coil),</span>
+<span class="c">#    solve the resonator for C:</span>
+C = 1 / (2π·f0)² · L
+  = 1 / ((2π·3.5701e6)² · 1e-6) = 1.99 nF
+
+<span class="c"># 3. Coupling capacitors set the loaded Q</span>
+<span class="c">#    (impedance-invert the ladder; ARRL/EMRFD tables)</span>
+<span class="c"># 4. Estimate insertion loss ~ 1–2 dB for Q_L 35</span></pre>
+      <p><strong>Check the rejection at 12 MHz</strong>: the response of a 2-pole Butterworth
+      falls as (f/f₀)<sup>−2</sup> beyond the band — 12/3.57 = 3.36 ⇒ ≈ −10.5 dB… not enough
+      alone for the clock line. Add a <em>notch</em> or a third pole. This is why the procedure
+      ends in measurement (docs/rf.md §8), not in a parts list.</p>
+    </div>
+    <div>
+      <figure>
+      <svg viewBox="0 0 440 170" role="img" aria-label="LC ladder topology">
+        <line x1="20" y1="60" x2="90" y2="60" stroke="#334155" stroke-width="2"/>
+        <path d="M90,60 l10,-14 l14,28 l14,-28 l14,28 l14,-28 l14,28 l10,-14" fill="none" stroke="#0e7490" stroke-width="2.5"/>
+        <line x1="170" y1="60" x2="250" y2="60" stroke="#334155" stroke-width="2"/>
+        <line x1="210" y1="60" x2="210" y2="95" stroke="#334155"/>
+        <path d="M196,95 h28 M196,103 h28 M200,111 h20 M204,119 h12" stroke="#0e7490" stroke-width="2.5"/>
+        <line x1="210" y1="119" x2="210" y2="140" stroke="#334155"/>
+        <line x1="180" y1="140" x2="240" y2="140" stroke="#334155"/>
+        <line x1="250" y1="60" x2="330" y2="60" stroke="#334155" stroke-width="2"/>
+        <path d="M330,60 l10,-14 l14,28 l14,-28 l14,28 l14,-28 l14,28 l10,-14" fill="none" stroke="#0e7490" stroke-width="2.5"/>
+        <line x1="410" y1="60" x2="430" y2="60" stroke="#334155" stroke-width="2"/>
+        <text x="20" y="45" font-size="11" fill="#475569">pin →</text>
+        <text x="118" y="40" font-size="11" fill="#0e7490">L = 1 µH</text>
+        <text x="222" y="115" font-size="11" fill="#0e7490">C 1.99 nF</text>
+        <text x="355" y="40" font-size="11" fill="#0e7490">L</text>
+        <text x="430" y="45" font-size="11" fill="#475569">→ load</text>
+        <text x="20" y="160" font-size="11" fill="#475569">series-L + shunt-C + series-L: a 3-pole ladder, drawn honestly simply</text>
+      </svg>
+      </figure>
+      <div class="box warn"><span class="tag">Discipline</span>
+      These values are a <em>worked exercise</em>, not a ratified design. The real chain is
+      designed after measuring the pin spectrum (docs/rf.md §8) — the same
+      measure-then-decide order as the code review process.</div>
+    </div>
+  </div>
+  <div class="box theory"><span class="tag">Book</span>
+  EMRFD ch. 3 (filters) and the ARRL Handbook's filter chapter — both walk this exact ladder
+  arithmetic with tables for higher pole counts. Wikipedia:
+  <a href="https://en.wikipedia.org/wiki/Butterworth_filter">Butterworth</a>,
+  <a href="https://en.wikipedia.org/wiki/Q_factor">Q factor</a>,
+  <a href="https://en.wikipedia.org/wiki/Filter_design">filter design</a>.</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 7 · The RF chain</div>
   <h2>Levels: honest arithmetic</h2>
   <div class="cols">
     <div>
@@ -1234,7 +2115,85 @@ python3 tools/make_wspr_wav.py        <span class="c"># synthetic WAV → wsprd<
   </div>
 </section>
 
+<section class="slide">
+  <div class="kicker">Part 7 · Recap &amp; pitfalls</div>
+  <h2>Part 7 distilled</h2>
+  <div class="cols">
+    <div>
+      <h3>You can now…</h3>
+      <ul>
+        <li>Draw the full transmit spectrum for any band from the m·f<sub>s</sub> ± f rule and
+        the square wave's odd harmonics.</li>
+        <li>Run the band-pass design arithmetic (Q, resonator C, rejection estimate) and know
+        when the estimate says “add a pole or a notch”.</li>
+        <li>Compute pin levels honestly and explain why −1 dBm from a resistor is still a
+        workable WSPR beacon.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Three ways to kill a decode from the analog side</h3>
+      <ul>
+        <li><strong>Filter the wrong line</strong> — the fold is stronger but mirrored; a
+        1.86 MHz “30 m beacon” decodes as nothing at all (part 2's rule).</li>
+        <li><strong>Let the clock line through</strong> — 12 MHz is unmodulated and strong; a
+        lazy filter puts a carrier grave jacket over your noise floor... actually worse: it
+        lands <em>in</em> other services' receivers and invites the regulator to yours.</li>
+        <li><strong>Over-spend the budget</strong> — 6 dB of avoidable insertion loss on the
+        30 m image is most of the image's headroom. Count dB like euros.</li>
+      </ul>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      A friend proposes transmitting on 20 m (14 097 100 Hz). Using the docs/rf.md §2 table:
+      what is the usable line's sinc weight, and which line would a lazy filter grab?
+      (−16.99 dB; the strong unmodulated-looking alias at 2.0971 MHz — which is
+      <em>tone-correct</em> here but nowhere near any amateur band: a beautiful trap.)</div>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= PART 8 ======================= -->
+<section class="slide">
+  <div class="kicker">Part 8 · Verification</div>
+  <h2>The verification pyramid</h2>
+  <figure>
+  <svg viewBox="0 0 900 300" role="img" aria-label="verification pyramid">
+    <polygon points="450,20 850,280 50,280" fill="#f1f5f9" stroke="#334155"/>
+    <polygon points="450,60 730,250 170,250" fill="#e0f2fe" stroke="#0e7490"/>
+    <polygon points="450,105 610,225 290,225" fill="#dcfce7" stroke="#15803d"/>
+    <polygon points="450,150 500,200 400,200" fill="#fef9c3" stroke="#b45309"/>
+    <g font-size="12" text-anchor="middle" font-family="Arial" fill="#1c2330">
+      <text x="450" y="45">§ decoder adjudication — wsprd decodes the golden chain</text>
+      <text x="450" y="200" font-weight="bold">integration TB</text>
+      <text x="450" y="216" font-size="10">tb_wspr_top: timing + tone identity (M7)</text>
+      <text x="450" y="245" font-weight="bold">unit testbenches × 12</text>
+      <text x="450" y="261" font-size="10">every block, success AND failure paths</text>
+      <text x="450" y="280" font-weight="bold">golden vectors + independent model</text>
+    </g>
+    <g font-size="11" fill="#475569">
+      <text x="860" y="150" text-anchor="end" transform="rotate(-90 860,150)">catches: protocol misunderstandings (expensive, late)</text>
+    </g>
+  </svg>
+  <figcaption>Each layer assumes the one below. The pyramid's width is the cost of a bug found
+  there: a golden mismatch is fixed in minutes; a decoder failure would have meant months of
+  guessing.</figcaption>
+  </figure>
+  <div class="cols">
+    <div>
+      <div class="box theory"><span class="tag">Why the independent model matters</span>
+      The Python model was written <em>from the spec</em>, never from the RTL. When RTL and
+      model disagree, you have a genuine three-way referee: the model, the RTL, and
+      <code>wsprcode</code>. Two derivations agreeing is evidence; one derivation agreeing with
+      itself is a mirror.</div>
+    </div>
+    <div>
+      <div class="box story"><span class="tag">Layer statistics from this repo</span>
+      Goldens: 0/162 mismatches vs wsprcode. Unit TBs: 13/13 pass, including negative paths.
+      Integration: caught nothing about M1 (it checked timing only) — fixed by M7. Decoder:
+      the final arbiter. The lesson: <strong>no single layer is enough</strong>; each catches a
+      class the others cannot see.</div>
+    </div>
+  </div>
+</section>
+
 <section class="slide" id="p8">
   <div class="kicker">Part 8 · Verification</div>
   <h2>“It synthesizes” is not done</h2>
@@ -1296,6 +2255,44 @@ wait until rising_edge(clk);</pre>
 
 <section class="slide">
   <div class="kicker">Part 8 · Verification</div>
+  <h2>A golden vector, dissected</h2>
+  <p><code>reference/test_vectors/k1abc_fn42_37.txt</code> is the project's ground truth. Its
+  anatomy shows how each layer consumes it:</p>
+  <pre class="code"><span class="c"># WSPR Type-1 golden test vector — BENCH/SIMULATION ONLY, NEVER RADIATE.</span>
+<span class="c"># Message: "K1ABC FN42 37"</span>
+<span class="c"># n (callsign, 28b) = 259047992 = 0x0F70C238   ← part 4's worked packing</span>
+<span class="c"># payload (50b): 11110111 00001100 00100011 …  ← what wspr_message must emit</span>
+<span class="c"># SYNC (162b):    110000001000111000100101111000…  ← wspr_sync's constant</span>
+<span class="c"># TONES: 3 3 0 0 2 0 0 0 1 0 2 0 … (162)      ← what the modulator must send</span></pre>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><code>tb_wspr_message</code> checks the payload bits.</li>
+        <li><code>tb_wspr_fec</code> checks the 162 coded bits against the model.</li>
+        <li><code>tb_wspr_interleave</code> checks the permutation (and its popcount
+        invariant).</li>
+        <li><code>tb_wspr_symbols</code> checks the 162 tones.</li>
+        <li><code>tb_wspr_top</code> checks the transmitted tone <em>classes</em> against the
+        same vector (M7) — the vector follows the signal from source to pin.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box theory"><span class="tag">Why humans can read it</span>
+      The file is ASCII, commented, and generated by a command printed in its own header. When
+      a testbench fails, a student diffs expected vs actual by eye. Contrast with a binary
+      testvector: same information, zero pedagogy. <strong>Test data is documentation
+      too.</strong></div>
+      <div class="box practice"><span class="tag">Check yourself</span>
+      The vector's header says “Cross-check: 0/162 channel-symbol differences vs
+      /usr/bin/wsprcode”. Which direction does that check run — does the RTL depend on
+      wsprcode at runtime? (No: wsprcode pinned the vector at generation time; the RTL is
+      verified <em>against</em> the frozen file. The decoder adjudication closes the loop.)</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 8 · Verification</div>
   <h2>Proof by decoder: the crown of the evidence</h2>
   <div class="cols">
     <div>
@@ -1319,6 +2316,39 @@ $ wsprd -v -f 10.140210 /tmp/260101_0001.wav
       <code>tools/make_wspr_wav.py</code> both exist because of arguments they ended).</div>
     </div>
   </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 8 · Verification</div>
+  <h2>Debugging recipes — from this repo's actual history</h2>
+  <p>Every entry below really happened. The error message, the cause, the cure:</p>
+  <table>
+    <tr><th>Symptom</th><th>Cause</th><th>Cure / habit</th></tr>
+    <tr><td><code>unit "X" not found in library "work"</code> / <code>obsoleted by entity</code></td>
+        <td>stale GHDL <code>work-obj93.cf</code> after an edit; files analyzed in the wrong order</td>
+        <td>re-analyze in dependency order; nuke the workdir on weirdness. The Makefile encodes the order.</td></tr>
+    <tr><td><code>"end" must be followed by 'process'</code></td>
+        <td>a structural edit moved an <code>end if;</code> out of its nest</td>
+        <td>restructure whole blocks, not fragments; re-analyze after every edit</td></tr>
+    <tr><td><code>can't resolve overload for operator "&amp;"</code></td>
+        <td>concatenating two <code>std_logic</code>s is type-ambiguous in VHDL-93</td>
+        <td>route through a typed variable (<code>variable nxt : std_logic_vector(1 downto 0)</code>)</td></tr>
+    <tr><td>testbench reads its own stimulus</td>
+        <td>delta-0: sampling a signal at the edge that wrote it shows the old value</td>
+        <td>sample one edge later — the trap that cost several false FAILs (part 8 slide 2)</td></tr>
+    <tr><td>nextpnr rejects the netlist</td>
+        <td>fed BLIF where it wants JSON</td>
+        <td><code>synth_ice40 -json</code> → <code>nextpnr-ice40 --json</code> (env doc has the chain)</td></tr>
+    <tr><td><code>no numpy</code> in a project tool</td>
+        <td>oss-cad-suite's <code>py3bin</code> shadows <code>/usr/bin/python3</code> in login shells</td>
+        <td>call <code>/usr/bin/python3</code> explicitly (environment.md caveat)</td></tr>
+    <tr><td>GHDL chokes mid-file on a comment</td>
+        <td>non-ASCII character (an em-dash) — VHDL-93 sources must be plain ASCII</td>
+        <td>write comments with "--" and "-", spell out Greek letters</td></tr>
+  </table>
+  <div class="box theory"><span class="tag">The meta-lesson</span>
+  Error messages are documentation of the tool's model of your intent. The team that writes
+  down its errors once never pays for the same bug twice — this table is that write-down.</div>
 </section>
 
 <!-- ======================= PART 9 ======================= -->
@@ -1358,6 +2388,43 @@ $ wsprd -v -f 10.140210 /tmp/260101_0001.wav
 
 <section class="slide">
   <div class="kicker">Part 9 · VHDL &amp; FPGA primer</div>
+  <h2>What synthesis actually does to your VHDL</h2>
+  <div class="cols">
+    <div>
+      <pre class="code">wspr_modulator.vhd
+   │  yosys -m ghdl   <span class="c">(GHDL elaborates to RTLIL)</span>
+   ▼
+top.json            <span class="c">(synth_ice40: map to LUTs/FFs/BRAM)</span>
+   │  nextpnr-ice40 --up5k --package sg48
+   │                <span class="c">(place every cell, route every net,</span>
+   ▼                <span class="c"> honour the PCF pin constraints)</span>
+top.asc             <span class="c">(the placed & routed chip image)</span>
+   │  icepack
+   ▼
+top.bin             <span class="c">(what iceprog flashes)</span>
+   │  icetime -d up5k
+   ▼
+<span class="c">"31.09 MHz — the slowest path still beats 12 MHz"</span></pre>
+    </div>
+    <div>
+      <h3>Where the 40-bit adder went</h3>
+      <p>Synthesis maps arithmetic onto <a href="https://en.wikipedia.org/wiki/Field-programmable_gate_array">FPGA</a>
+      fabric: each carry-chain slice computes a few sum bits per LUT. The iCE40UP5K has 5280
+      LUTs; our design uses a few thousand — the accumulator, the FSMs, the UART shift
+      registers. No block-RAM, no DSP multipliers (we removed the one that mattered in part 6).</p>
+      <p><code>icetime</code> then walks the routed netlist and reports the slowest
+      clock-to-clock path: our 32.16 ns vs the 83.3 ns requirement — a 2.6× margin, which is
+      what “works on the desk” means in numbers.</p>
+      <div class="box theory"><span class="tag">Timing closure in one sentence</span>
+      Every signal must arrive at its destination flip-flop before the next clock edge. Delay =
+      logic levels + routing. Margins are measured, not assumed — that is why
+      <code>make build</code> ends with a timing <em>report</em>, not a success slogan.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 9 · VHDL &amp; FPGA primer</div>
   <h2>Laboratories</h2>
   <div class="cols">
     <div>
@@ -1391,6 +2458,26 @@ $ wsprd -v -f 10.140210 /tmp/260101_0001.wav
       dummy-load procedure.</div>
     </div>
   </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 9 · VHDL &amp; FPGA primer</div>
+  <h2>Labs: what success looks like</h2>
+  <table>
+    <tr><th>Lab</th><th>Command</th><th>You have succeeded when…</th></tr>
+    <tr><td>1 Heartbeat</td><td>edit + <code>make sim TB=tb_wspr_top</code></td><td>led1 toggles every 3 000 000 cycles in the wave viewer; no other check regressed</td></tr>
+    <tr><td>2 Quantization</td><td><code>TB=tb_pps_measure</code> (perturbed period)</td><td><code>measured_cycles_per_second</code> follows the perturbation exactly, ±1</td></tr>
+    <tr><td>3 Averaging</td><td><code>TB=tb_clock_calibration</code> (N=1 vs 8, dithered)</td><td>spread shrinks ≈ √8; the mean stays offset by the bias</td></tr>
+    <tr><td>4 Folding</td><td><code>python3 tools/check_tone_order.py</code></td><td>you can point at the RF line and the fold line in the output numbers</td></tr>
+    <tr><td>5 Bitstream</td><td><code>make clean && make</code></td><td>icetime prints ≥ 30 MHz PASS; you found one placed cell in top.asc</td></tr>
+    <tr><td>6 Decoder</td><td><code>make_wspr_wav.py --start 1.5</code> + wsprd</td><td>DT ≈ +0.5 (you predicted it first)</td></tr>
+    <tr><td>7 Break M1</td><td>scratch mux copy</td><td>tb_wspr_top's tone-identity check fails with a specific symbol number — then reverts</td></tr>
+    <tr><td>8 Provenance</td><td>read spec.md</td><td>you traced any constant to WSJT-X file:line without help</td></tr>
+  </table>
+  <div class="box practice"><span class="tag">Working environment</span>
+  All sim labs need only GHDL (oss-cad-suite) and Python+numpy (Debian python3). Build labs
+  need the yosys/nextpnr/icestorm chain. Nothing needs the board. Commands are in
+  <a href="../Makefile">Makefile</a> and <a href="../docs/environment.md">docs/environment.md</a>.</div>
 </section>
 
 <!-- ======================= PART 10 ======================= -->
@@ -1512,6 +2599,23 @@ $ wsprd -v -f 10.140210 /tmp/260101_0001.wav
   When this course, the RTL, and a pinned source disagree, the pinned source wins; when the
   pinned source's comment and its executable disagree, the executable wins — and the discrepancy
   gets documented (spec §7's stale-comment story is the canonical example).</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Part 10 · Study plan</div>
+  <h2>A six-week self-study path</h2>
+  <table>
+    <tr><th>Week</th><th>Theory (slides)</th><th>Practice</th><th>Milestone</th></tr>
+    <tr><td>1</td><td>Parts 0–1</td><td>Labs 1–2; read nco.vhd header twice</td><td>you can explain the Nyquist ceiling to someone else</td></tr>
+    <tr><td>2</td><td>Part 2</td><td>Lab 4; toy-accumulator hand work</td><td>you can place every spectral line of the 1-bit output</td></tr>
+    <tr><td>3</td><td>Part 3</td><td>link budget by hand, no calculator aids</td><td>you can derive Eb/N₀ = 6.4 dB from kT</td></tr>
+    <tr><td>4</td><td>Part 4</td><td>Practice 4.2/4.3; read wsprd.c's five moves</td><td>you decoded your own WAV and predicted DT</td></tr>
+    <tr><td>5</td><td>Parts 5–6</td><td>Labs 3, 7; the M1 story re-told in your words</td><td>you can draw the scheduler FSM from memory</td></tr>
+    <tr><td>6</td><td>Parts 7–9</td><td>Labs 5–6, 8; the filter exercise</td><td>clean bitstream + you defend the verification pyramid</td></tr>
+  </table>
+  <div class="box theory"><span class="tag">Pacing note</span>
+  Week 3 is the hardest and the most valuable: the link budget is the course's spine. Do not
+  skip the hand calculation — the arithmetic is the insight.</div>
 </section>
 
 <section class="slide">
