@@ -30,17 +30,19 @@ architecture sim of tb_gps_parser is
   signal s     : natural range 0 to 59;
   signal fv    : std_logic;
   signal serr  : std_logic;
+  signal warn  : std_logic;
   signal done  : boolean := false;
   signal fails : integer := 0;
   signal strobes : integer := 0;
   signal errs    : integer := 0;
+  signal warns   : integer := 0;
 
 begin
 
   dut : entity work.gps_parser
     port map (clk => clk, rst => rst, data => data, data_valid => dv,
               time_strobe => strobe, hour => h, minute => m, second => s,
-              fix_valid => fv, sentence_error => serr);
+              fix_valid => fv, sentence_error => serr, fix_warning => warn);
 
   clk <= not clk after 500 ns when not done else '0';
 
@@ -49,6 +51,7 @@ begin
     if rising_edge(clk) then
       if strobe = '1' then strobes <= strobes + 1; end if;
       if serr = '1' then errs <= errs + 1; end if;
+      if warn = '1' then warns <= warns + 1; end if;
     end if;
   end process;
 
@@ -120,13 +123,19 @@ begin
       fails <= fails + 1;
     end if;
 
-    -- 3. status V (valid checksum 77) -> rejected (no valid fix commit)
+    -- 3. status V (valid checksum 77) -> NOT committed as valid time, but
+    --    fix_warning pulses (the fix is lost -- plan section 31)
     send_str("$GPRMC,123520,V,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*77");
     send(CR); send(LF);
     wait for 3 us;
     if strobes /= 1 then
       report "FAIL: V-status committed (strobe count "
              & integer'image(strobes) & ")" severity error;
+      fails <= fails + 1;
+    end if;
+    if warns /= 1 then
+      report "FAIL: fix_warning count " & integer'image(warns)
+             & " /= 1 after V sentence" severity error;
       fails <= fails + 1;
     end if;
     check_time(12, 35, 19, "V-status retained");

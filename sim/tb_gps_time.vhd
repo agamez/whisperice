@@ -25,11 +25,12 @@ architecture sim of tb_gps_time is
   signal hi   : natural range 0 to 23 := 0;
   signal mi   : natural range 0 to 59 := 0;
   signal si   : natural range 0 to 59 := 0;
+  signal warn : std_logic := '0';
   signal v    : std_logic;
   signal hh   : natural range 0 to 23;
   signal mm   : natural range 0 to 59;
   signal ss   : natural range 0 to 59;
-  signal em   : std_logic;
+  signal me   : std_logic;
   signal done : boolean := false;
   signal fails: integer := 0;
 
@@ -38,8 +39,8 @@ begin
   dut : entity work.gps_time
     port map (clk => clk, rst => rst, pps_tick => pps,
               time_strobe => strb, hour_in => hi, minute_in => mi,
-              second_in => si, utc_valid => v, hour => hh, minute => mm,
-              second => ss, even_minute => em);
+              second_in => si, fix_warning => warn, utc_valid => v,
+              hour => hh, minute => mm, second => ss, minute_even => me);
 
   clk <= not clk after 500 ns when not done else '0';
 
@@ -74,8 +75,8 @@ begin
     -- 1. NMEA load
     load(12, 35, 19);
     expect('1', 12, 35, 19, "load");
-    if em /= '0' then
-      report "FAIL: even_minute high at second 19" severity error;
+    if me /= '0' then
+      report "FAIL: minute_even high in odd minute 35" severity error;
       fails <= fails + 1;
     end if;
 
@@ -89,33 +90,56 @@ begin
     tick;
     expect('1', 12, 36, 0, "minute rollover");
 
-    -- 4. even minute flag: land on minute 38, second 0
+    -- 4. minute_even flag: high for the WHOLE even minute (36, 38 ...)
     --    now at 12:36:00 -> 12:38:00 is 2*60 = 120 ticks
+    if me /= '1' then
+      report "FAIL: minute_even /= 1 at 12:36:00" severity error;
+      fails <= fails + 1;
+    end if;
     for i in 1 to 120 loop tick; end loop;
     expect('1', 12, 38, 0, "even minute");
-    if em /= '1' then
-      report "FAIL: even_minute /= 1 at 12:38:00" severity error;
+    if me /= '1' then
+      report "FAIL: minute_even /= 1 at 12:38:00" severity error;
       fails <= fails + 1;
     end if;
     tick;
-    if em /= '0' then
-      report "FAIL: even_minute /= 0 at second 1" severity error;
+    if me /= '1' then
+      report "FAIL: minute_even /= 1 at second 1 of even minute" severity error;
       fails <= fails + 1;
     end if;
 
     -- 5. later load applies immediately
     load(13, 0, 1);
-    expect('1', 13, 0, 1, "reload");
-    if em /= '0' then
-      report "FAIL: even_minute /= 0 after reload to 13:00:01" severity error;
-      fails <= fails + 1;
-    end if;
+    expect('1', 13, 0, 1, "reload");   -- minute 0 is even: me stays '1'
 
     -- 6. minute/hour rollover: 13:59:59 -> 14:00:00
     load(13, 59, 59);
     expect('1', 13, 59, 59, "pre-hour-rollover");
+    if me /= '0' then
+      report "FAIL: minute_even /= 0 in odd minute 59" severity error;
+      fails <= fails + 1;
+    end if;
     tick;
     expect('1', 14, 0, 0, "hour rollover");
+    if me /= '1' then
+      report "FAIL: minute_even /= 1 at 14:00:00" severity error;
+      fails <= fails + 1;
+    end if;
+
+    -- 7. fix lost: fix_warning drops utc_valid (plan section 31)
+    warn <= '1'; wait until rising_edge(clk); warn <= '0';
+    wait until rising_edge(clk);
+    if v /= '0' then
+      report "FAIL: utc_valid /= 0 after fix_warning" severity error;
+      fails <= fails + 1;
+    end if;
+    tick;
+    if v /= '0' then
+      report "FAIL: utc_valid re-rose without a load" severity error;
+      fails <= fails + 1;
+    end if;
+    load(14, 0, 2);
+    expect('1', 14, 0, 2, "reload after fix loss");
 
     if fails = 0 then
       report "tb_gps_time: PASS - load, tick, rollovers, even_minute, reload";

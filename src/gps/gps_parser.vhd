@@ -42,8 +42,9 @@ entity gps_parser is
     minute         : out natural range 0 to 59;
     second         : out natural range 0 to 59;
     fix_valid      : out std_logic;
-    sentence_error : out std_logic      -- 1-cycle pulse on a rejected sentence
-  );
+    sentence_error : out std_logic;     -- 1-cycle pulse on a rejected sentence
+    fix_warning    : out std_logic      -- 1-cycle pulse: checksum-valid RMC
+  );                                    -- with status V (fix lost -- plan 31)
 end entity gps_parser;
 
 architecture rtl of gps_parser is
@@ -73,6 +74,7 @@ architecture rtl of gps_parser is
   signal valid_r  : std_logic := '0';
   signal strobe_r : std_logic := '0';
   signal err_r    : std_logic := '0';
+  signal warn_r   : std_logic := '0';
 
   -- address-field match: SENTENCE_TYPE as characters
   function type_char(i : positive) return character is
@@ -92,6 +94,7 @@ begin
     if rising_edge(clk) then
       strobe_r <= '0';
       err_r    <= '0';
+      warn_r   <= '0';
 
       if rst = '1' then
         state      <= ST_IDLE;
@@ -193,12 +196,16 @@ begin
               mm := (time_digits / 100) mod 100;
               ss := time_digits mod 100;
               if hh <= 23 and mm <= 59 and ss <= 59 then
-                hour_r   <= hh;
-                minute_r <= mm;
-                second_r <= ss;
-                valid_r  <= '1';
-                strobe_r <= '1';
-                state    <= ST_IDLE;
+                if status_ok then
+                  hour_r   <= hh;
+                  minute_r <= mm;
+                  second_r <= ss;
+                  valid_r  <= '1';
+                  strobe_r <= '1';
+                else
+                  warn_r   <= '1';          -- status V: fix lost (plan 31)
+                end if;
+                state <= ST_IDLE;
               else
                 state <= ST_IDLE;           -- impossible time: reject
                 err_r <= '1';
@@ -224,5 +231,6 @@ begin
   second         <= second_r;
   fix_valid      <= valid_r;
   sentence_error <= err_r;
+  fix_warning    <= warn_r;
 
 end architecture rtl;

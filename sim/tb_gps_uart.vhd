@@ -26,7 +26,6 @@ architecture sim of tb_gps_uart is
   signal data  : std_logic_vector(7 downto 0);
   signal dv    : std_logic;
   signal ferr  : std_logic;
-  signal ovrr  : std_logic;
   signal done  : boolean := false;
   signal fails : integer := 0;        -- checker-side failures
   signal m_fails : integer := 0;      -- main-side failures
@@ -51,7 +50,7 @@ begin
   dut : entity work.gps_uart
     generic map (CLOCK_HZ => CLOCK_HZ, BAUD_RATE => BAUD)
     port map (clk => clk, rst => rst, rx => rx, data => data,
-              data_valid => dv, framing_error => ferr, overrun => ovrr);
+              data_valid => dv, framing_error => ferr);
 
   clk <= not clk after 500 ns when not done else '0';
 

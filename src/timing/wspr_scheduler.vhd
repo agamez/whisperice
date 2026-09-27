@@ -11,17 +11,23 @@
 --
 --   WAIT_GPS  : no UTC yet -- NO TX (plan section 31).
 --   CALIBRATE : pulse cal_start; the calibration block (clock_calibration)
---               answers cal_valid (frozen value).  cal_error -> retry the
---               window.  Calibration runs before EVERY transmission (plan
---               section 7).
---   READY     : calibrated; wait for a slot.
---   WAIT_SLOT : even UTC minute AND second = 1 (spec section 7: +1.000 s)
---               AND slot selected by slot_mask -> TX.
+--               completes a window and RAISES cal_valid (in-bounds) or
+--               cal_error (out-of-bounds).  Because both levels persist after
+--               the window, only their RISING EDGES are accepted here; on a
+--               cal_error edge the window is re-pulsed (retry).  Calibration
+--               runs before EVERY transmission (plan section 7).
+--   READY     : freshly calibrated; wait for a slot.
+--   WAIT_SLOT : minute_even AND second = 1 (spec section 7: +1.000 s into the
+--               even UTC minute) AND slot_mask selected -> TX.
 --   TX        : tx_enable pulses (1 cycle) to the modulator tx_start; the
 --               symbol index advances on each symbol_tick from the modulator
 --               (the modulator owns symbol timing); after SYMBOLS_PER_TX
---               ticks -> TX_DONE.
---   TX_DONE   : 1-cycle state -> WAIT_SLOT.
+--               ticks -> TX_DONE.  NOTE: symbol_index selects which of the
+--               162 channel symbols is next; integration muxes the codec's
+--               tone vector (wspr_symbols) with it to feed the modulator's
+--               2-bit symbol_index input.
+--   TX_DONE   : 1-cycle state -> CALIBRATE (recalibrate before the next TX,
+--               plan section 7).
 --
 -- Failure behavior (plan section 31): utc_valid drops -> back to WAIT_GPS
 -- (no new TX); calibration invalid/error -> CALIBRATE; reset -> tx off.
@@ -51,10 +57,13 @@ entity wspr_scheduler is
     slot_mask    : in  std_logic_vector(0 to 29);
     -- UTC from gps_time.vhd
     utc_valid    : in  std_logic;
-    even_minute  : in  std_logic;
+    minute_even  : in  std_logic;       -- valid AND even minute (whole minute)
     second       : in  natural range 0 to 59;
     minute       : in  natural range 0 to 59;
-    -- calibration handshake (clock_calibration.vhd)
+    -- calibration handshake (clock_calibration.vhd).  cal_valid/cal_error are
+    -- LEVELS that persist after a window; this FSM acts only on their EDGES
+    -- so a stale level can never substitute for a fresh calibration window
+    -- (plan section 7: calibrate before EVERY transmission).
     cal_valid    : in  std_logic;
     cal_error    : in  std_logic;
     cal_start    : out std_logic;
@@ -76,7 +85,8 @@ architecture rtl of wspr_scheduler is
   signal cal_start_r : std_logic := '0';
   signal tx_enable_r : std_logic := '0';
   signal sym_cnt     : natural range 0 to SYMBOLS_PER_TX := 0;
-  signal restart     : boolean := false;   -- retry calibration after error
+  signal cal_v_prev  : std_logic := '0';   -- rising-edge detects (fresh window)
+  signal cal_e_prev  : std_logic := '0';   -- retry calibration after error
 
 begin
 
@@ -86,11 +96,17 @@ begin
       cal_start_r <= '0';
       tx_enable_r <= '0';
 
+      -- edge detects on the calibration handshake (levels persist!)
+      cal_v_prev <= cal_valid;
+      cal_e_prev <= cal_error;
+
       if rst = '1' then
         state       <= WAIT_GPS;
         sym_cnt     <= 0;
         cal_start_r <= '0';
         tx_enable_r <= '0';
+        cal_v_prev  <= '0';
+        cal_e_prev  <= '0';
       else
         case state is
 
@@ -98,18 +114,15 @@ begin
             if utc_valid = '1' then
               state       <= CALIBRATE;
               cal_start_r <= '1';         -- calibrate before EVERY TX (plan 7)
-              restart     <= false;
             end if;
 
           when CALIBRATE =>
-            -- calibration answers asynchronously via cal_valid/cal_error
-            if cal_error = '1' then
-              restart     <= true;        -- request a fresh window
-            elsif cal_valid = '1' and restart = false then
-              state       <= READY;
-            elsif cal_valid = '1' and restart = true then
-              restart     <= false;
-              cal_start_r <= '1';         -- re-run the calibration window
+            -- fresh window finished in-bounds: cal_valid RISES
+            if cal_valid = '1' and cal_v_prev = '0' then
+              state <= READY;
+            -- window finished out-of-bounds: cal_error RISES -> re-run
+            elsif cal_error = '1' and cal_e_prev = '0' then
+              cal_start_r <= '1';
             end if;
 
           when READY =>
@@ -118,6 +131,8 @@ begin
             else
               state <= WAIT_SLOT;
             end if;
+            -- NOTE: a stale cal_valid level cannot re-enter READY; only a
+            -- fresh rising edge in CALIBRATE does.
 
           when TX =>
             if utc_valid = '0' then
@@ -137,12 +152,14 @@ begin
             end if;
 
           when TX_DONE =>
-            state <= WAIT_SLOT;
+            -- plan section 7: calibrate before EVERY transmission
+            state       <= CALIBRATE;
+            cal_start_r <= '1';
 
           when WAIT_SLOT =>
             if utc_valid = '0' then
               state <= WAIT_GPS;          -- recalibrate before the next TX
-            elsif even_minute = '1' and second = 1 then
+            elsif minute_even = '1' and second = 1 then
               if slot_mask(minute / 2) = '1' then
                 state       <= TX;
                 tx_enable_r <= '1';

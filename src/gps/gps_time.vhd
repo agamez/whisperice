@@ -17,8 +17,11 @@
 -- the scheduler also re-checks via the parser's fix_valid through the load
 -- value; a 'V' status simply never loads).
 --
--- even_minute flags minute(0)='0' with second=0 (WSPR slots are the even UTC
--- minutes; TX starts at second 1, spec section 7).
+-- minute_even flags a VALID time inside an even UTC minute (the WSPR slot
+-- minute).  It stays high for the whole minute; the scheduler fires TX at
+-- second = 1 (spec section 7: +1.000 s into the even minute).  A fix_warning
+-- (status-V NMEA sentence) drops utc_valid so the scheduler stops transmitting
+-- until a valid fix returns (plan section 31).
 --
 -- VHDL-93 only.
 --------------------------------------------------------------------------------
@@ -38,12 +41,14 @@ entity gps_time is
     hour_in      : in  natural range 0 to 23;
     minute_in    : in  natural range 0 to 59;
     second_in    : in  natural range 0 to 59;
+    -- fix lost (from gps_parser.fix_warning): invalidates UTC (plan section 31)
+    fix_warning  : in  std_logic;
     -- current UTC
     utc_valid    : out std_logic;
     hour         : out natural range 0 to 23;
     minute       : out natural range 0 to 59;
     second       : out natural range 0 to 59;
-    even_minute  : out std_logic       -- minute(0)='0' and second=0
+    minute_even  : out std_logic       -- valid AND minute even (whole minute)
   );
 end entity gps_time;
 
@@ -64,6 +69,8 @@ begin
         minute_r <= 0;
         second_r <= 0;
         valid_r  <= '0';
+      elsif fix_warning = '1' then
+        valid_r  <= '0';               -- fix lost: no further TX (plan 31)
       else
         if time_strobe = '1' then
           -- NMEA says which second it is (applied immediately; the 1PPS
@@ -98,7 +105,6 @@ begin
   hour        <= hour_r;
   minute      <= minute_r;
   second      <= second_r;
-  even_minute <= '1' when second_r = 0 and (minute_r mod 2) = 0 and valid_r = '1'
-                 else '0';
+  minute_even <= '1' when valid_r = '1' and (minute_r mod 2) = 0 else '0';
 
 end architecture rtl;

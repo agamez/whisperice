@@ -9,9 +9,11 @@
 -- starts the frame, every bit is sampled at its centre (half a bit period
 -- after the previous sample), and the stop bit must be high (otherwise a
 -- framing error is flagged and the byte is discarded).  No FIFO: a new byte
--- completing while data_valid has not been consumed raises overrun (plan
--- section 31: corrupt/missed data must not corrupt the valid time -- the
--- parser simply loses a sentence, which is safe).
+-- completing raises data_valid for one cycle; the parser consumes every byte
+-- immediately and NMEA at 9600 baud leaves ample time, so no overrun/FIFO
+-- path exists (a dropped byte merely aborts one sentence -- plan section 31
+-- safe).  A deliberate overrun flag would require a consumption ack; it was
+-- removed as dead logic (adversarial review finding).
 --
 -- The bit period is CLOCK_HZ/BAUD_RATE truncated to an integer.  At 12 MHz /
 -- 9600 baud that is 1250 cycles (exact); the truncation error is within the
@@ -36,8 +38,7 @@ entity gps_uart is
     rx             : in  std_logic;
     data           : out std_logic_vector(7 downto 0);
     data_valid     : out std_logic;
-    framing_error  : out std_logic;
-    overrun        : out std_logic
+    framing_error  : out std_logic
   );
 end entity gps_uart;
 
@@ -60,7 +61,6 @@ architecture rtl of gps_uart is
 
   signal valid_r  : std_logic := '0';
   signal frame_r  : std_logic := '0';
-  signal overrun_r: std_logic := '0';
 
 begin
 
@@ -80,7 +80,6 @@ begin
     if rising_edge(clk) then
       valid_r    <= '0';
       frame_r    <= '0';
-      overrun_r  <= '0';
 
       if rst = '1' then
         state   <= ST_IDLE;
@@ -127,7 +126,6 @@ begin
               -- centre of the stop bit
               if rx_sync = '1' then
                 valid_r   <= '1';
-                overrun_r <= valid_r;   -- previous byte not yet consumed?
               else
                 frame_r   <= '1';       -- framing error: byte discarded
               end if;
@@ -143,6 +141,5 @@ begin
   data          <= shifter;
   data_valid    <= valid_r;
   framing_error <= frame_r;
-  overrun       <= overrun_r;
 
 end architecture rtl;

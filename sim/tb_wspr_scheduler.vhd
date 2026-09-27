@@ -29,7 +29,7 @@ architecture sim of tb_wspr_scheduler is
   signal clk   : std_logic := '0';
   signal rst   : std_logic := '1';
   signal uv    : std_logic := '0';
-  signal em    : std_logic := '0';
+  signal meven : std_logic := '0';
   signal sec   : natural range 0 to 59 := 0;
   signal min   : natural range 0 to 59 := 0;
   signal calv  : std_logic := '0';
@@ -49,7 +49,7 @@ begin
   dut : entity work.wspr_scheduler
     generic map (SYMBOLS_PER_TX => NUM_SYMS)
     port map (clk => clk, rst => rst, slot_mask => mask, utc_valid => uv,
-              even_minute => em,
+              minute_even => meven,
               second => sec, minute => min, cal_valid => calv,
               cal_error => calerr, cal_start => cals, tx_enable => txe,
               symbol_tick => tick, tx_active => act, symbol_index => sidx,
@@ -97,27 +97,26 @@ begin
     end if;
     cycle;
 
-    -- 2. calibration error -> retry
-    calerr <= '1'; cycle; cycle; calerr <= '0'; cycle;
-    -- after error, scheduler requests a restart on next cal_valid
-    calv <= '1'; cycle; cycle;             -- acknowledged the errored window
+    -- 2. calibration error (cal_error RISES) -> cal_start retry pulse
+    calerr <= '1'; cycle; cycle;
     if cals /= '1' then
-      report "FAIL: no cal_start retry after calibration error" severity error;
+      report "FAIL: no cal_start retry on cal_error edge" severity error;
       fails <= fails + 1;
     end if;
-    cycle; cycle;
-    calv <= '0'; cycle;
-    -- clean window completes -> READY (state 2) -> WAIT_SLOT (state 3)
-    calv <= '1'; cycle; cycle;
+    calerr <= '0'; cycle;
+    -- clean window completes: cal_valid RISES -> READY -> WAIT_SLOT
+    calv <= '1'; cycle; cycle; cycle;  -- rising edge -> READY, then WAIT_SLOT
     if st /= 3 then
       report "FAIL: state " & integer'image(st) & " /= 3 (WAIT_SLOT) after"
              & " clean calibration" severity error;
       fails <= fails + 1;
     end if;
-    calv <= '0';
+    -- stale level must NOT matter later: leave calv high through the
+    -- GPS-drop/return test below (adversarial-review finding)
 
-    -- 4/5. slot timing: even minute, second 0 -> no TX; second 1 -> TX
-    min <= 2; sec <= 0; em <= '1'; cycle; cycle;
+    -- 4/5. slot timing: minute_even stays high for the whole even minute
+    --      (12:36:xx); no TX at second 0, TX at second 1
+    min <= 2; sec <= 0; meven <= '1'; cycle; cycle;
     expect_tx(false, "second 0");
     sec <= 1; cycle;
     cycle;   -- txe was assigned at the previous edge: sample one edge later
@@ -132,29 +131,46 @@ begin
     -- 6. run the 162 symbols
     run_tx_ticks;
     -- real UTC advances during the 110.592 s TX: leave the firing condition
-    -- so WAIT_SLOT does not immediately re-fire on the stale second=1
-    sec <= 2; em <= '0'; cycle; cycle;
+    sec <= 2; meven <= '0'; cycle;
+    -- plan section 7: TX_DONE -> CALIBRATE with a fresh cal_start (the
+    -- previous calv level is stale and must be ignored).  cal_start is a
+    -- 1-cycle pulse set at TX_DONE+1: visible NOW (one cycle after the last
+    -- tick), gone one cycle later.
+    if cals /= '1' then
+      report "FAIL: no cal_start for the second TX" severity error;
+      fails <= fails + 1;
+    end if;
+    cycle;
     if sidx /= NUM_SYMS - 1 then
       report "FAIL: final symbol_index " & integer'image(sidx)
              & " /= " & integer'image(NUM_SYMS-1) severity error;
       fails <= fails + 1;
     end if;
-    wait until rising_edge(clk);
-    if st /= 3 then
-      report "FAIL: state " & integer'image(st) & " /= 3 (WAIT_SLOT) after TX"
+    if st /= 1 then
+      report "FAIL: state " & integer'image(st) & " /= 1 (CALIBRATE) after TX"
              severity error;
+      fails <= fails + 1;
+    end if;
+    -- fresh window: drop the stale level, then raise it (new rising edge)
+    calv <= '0'; cycle; cycle;
+    calv <= '1'; cycle; cycle; cycle;
+    if st /= 3 then
+      report "FAIL: state " & integer'image(st) & " /= 3 (WAIT_SLOT) after"
+             & " second calibration" severity error;
       fails <= fails + 1;
     end if;
 
     -- 7. slot mask gating: minute 4 -> slot 2; mask it off
     mask(2) <= '0';
-    min <= 4; sec <= 0; em <= '1'; cycle; cycle;
+    min <= 4; sec <= 0; meven <= '1'; cycle; cycle;
     sec <= 1; cycle; cycle;
     expect_tx(false, "masked slot");
     sec <= 2; cycle;                       -- leave the firing condition first
     mask(2) <= '1';                        -- (else re-masking at second=1 fires)
 
-    -- 8. utc_valid drop -> WAIT_GPS -> recalibration on return
+    -- 8. utc_valid drop -> WAIT_GPS -> recalibration on return.
+    --    calv is STILL HIGH from the previous window (stale): the scheduler
+    --    must wait for a fresh rising edge, not the level.
     uv <= '0'; cycle; cycle;
     if st /= 0 then
       report "FAIL: state " & integer'image(st) & " /= 0 (WAIT_GPS) after"
@@ -167,11 +183,21 @@ begin
       fails <= fails + 1;
     end if;
     cycle; cycle;
-    calv <= '1'; cycle; cycle;             -- clean window -> WAIT_SLOT
-    calv <= '0'; cycle;
+    if st /= 1 then
+      report "FAIL: stale cal_valid produced READY (state "
+             & integer'image(st) & " /= 1 CALIBRATE)" severity error;
+      fails <= fails + 1;
+    end if;
+    calv <= '0'; cycle;                    -- fresh window now completes
+    calv <= '1'; cycle; cycle; cycle;
+    if st /= 3 then
+      report "FAIL: state " & integer'image(st) & " /= 3 (WAIT_SLOT) after"
+             & " fresh post-drop calibration" severity error;
+      fails <= fails + 1;
+    end if;
 
     -- 9. reset during TX: get to TX then reset
-    min <= 6; sec <= 0; em <= '1'; cycle; cycle;
+    min <= 6; sec <= 0; meven <= '1'; cycle; cycle;
     sec <= 1; cycle;
     cycle;                                 -- sample txe one edge after firing
     expect_tx(true, "second TX");
