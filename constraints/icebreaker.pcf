@@ -12,9 +12,11 @@ set_io clk 35
 set_io led1 11    # LEDR_N
 set_io led2 37    # LEDG_N
 
-# PmodGPS on PMOD1A (docs/spec.md section 11: 3DF=4, RX=2, TX=47, 1PPS=45)
-set_io uart_rx 2  # FPGA UART RX <- PmodGPS TX
-set_io pps 45     # PmodGPS 1PPS (~100 ms pulse, edge-detected in RTL)
+# PmodGPS on PMOD1A (docs/spec.md section 11: 3DF=P1A1/4, RX=P1A2/2,
+# TX=P1A3/47, 1PPS=P1A4/45).  NOTE: the FPGA's UART RX must listen to the
+# GPS's TX (NMEA output) = P1A3 = pin 47 -- NOT the GPS's RX line (P1A2/2).
+set_io uart_rx 47 # FPGA UART RX <- PmodGPS TX (NMEA output, P1A3)
+set_io pps 45     # PmodGPS 1PPS (P1A4, ~100 ms pulse, edge-detected in RTL)
 
 # RF output (P1B10, proposed in docs/spec.md section 11)
 set_io rf_out 28

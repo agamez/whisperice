@@ -33,7 +33,8 @@
 -- Pins (constraints/icebreaker.pcf; official icebreaker PCF
 -- icebreaker-examples @ cb9e674c, docs/spec.md section 11):
 --   clk 35, led1 11 (LEDR_N, active-low), led2 37 (LEDG_N, active-low),
---   uart_rx 2 (PMOD1A <- PmodGPS TX), pps 45 (PMOD1A 1PPS), rf_out 28 (P1B10).
+--   uart_rx 47 (PMOD1A P1A3 <- PmodGPS TX / NMEA output), pps 45 (P1A4
+--   1PPS), rf_out 28 (P1B10).
 --
 -- LED semantics (plan section 32 diagnostics):
 --   led1 : heartbeat -- blinks ~1 Hz from the 12 MHz clock (board alive)
