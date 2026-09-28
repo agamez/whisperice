@@ -37,7 +37,8 @@ src/           VHDL-93 RTL (clock/, gps/, timing/, nco/, wspr/, top)
 sim/           VHDL-93 testbenches
 reference/     Independent WSPR reference model + test vectors
 tools/         Helper scripts (NCO constant calculation, WSPR inspection)
-docs/          Architecture, protocol, GPS, RF, verification, lab notes, environment
+docs/          Architecture, protocol, GPS, RF, verification, hardware bring-up runbook,
+               lessons + course, lab notes, environment
 ```
 
 The layout follows the plan's "Recommended Repository Structure" (§27) exactly. The repository is

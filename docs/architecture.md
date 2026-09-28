@@ -259,6 +259,9 @@ symbols (`reference/README.md`; spec §2–§5). GPS/timing verification detail 
   modulator increments are build-time generics.
 - `src/clock/clock_control.vhd`, `tools/inspect_wspr.py`, `docs/lab.md` — 0-byte placeholders.
 - Hardware bring-up: no iCEBreaker was attached during environment setup (`docs/environment.md` §4).
+  The full runbook for the agent with hardware access — rig wiring, machine setup, ratification
+  checklist (spec §16), staged bring-up and feedback loop — is
+  [`docs/hardware.md`](hardware.md); `docs/lab.md` is its log.
   PENDING-HARDWARE items (spec §16): board revision, ~2.8 V GPS I/O levels, 1PPS pulse width, which
   NMEA sentences are actually emitted, FTDI/UART, RF pin ratification.
 - `docs/lessons.md` (plan §33 teaching walkthrough) is new; Lessons 10–11 are walkable:

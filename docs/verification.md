@@ -117,6 +117,10 @@ silicon, the RF chain of [`docs/rf.md`](rf.md), and over-the-air reception.
 
 ## 5. Hardware adjudication plan (PENDING-HARDWARE, spec §16)
 
+> The complete runbook for the agent with hardware access — machine setup, ratification
+> checklist, staged bring-up, feedback loop and stop-gates — is
+> [`docs/hardware.md`](hardware.md). The plan below is the summary; the runbook is the procedure.
+
 1. Environment: `lsusb | grep 0403:6010`, `iceprog -t` against the board; record in
    `docs/environment.md` §4.
 2. Bench TX into a **50 Ω dummy load** (never an antenna; plan §25): capture `rf_out` with a
