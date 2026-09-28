@@ -36,9 +36,10 @@ constraints/   iCEBreaker pin constraints (.pcf)
 src/           VHDL-93 RTL (clock/, gps/, timing/, nco/, wspr/, top)
 sim/           VHDL-93 testbenches
 reference/     Independent WSPR reference model + test vectors
-tools/         Helper scripts (NCO constant calculation, WSPR inspection)
-docs/          Architecture, protocol, GPS, RF, verification, hardware bring-up runbook,
-               lessons + course, lab notes, environment
+tools/         Helper scripts (NCO constant calculation, WSPR inspection, WAV synthesis)
+docs/          Architecture, protocol, GPS, RF, verification, hardware bring-up runbook +
+               hardware archive (schematics, pinouts, provenance PCF), lessons + course,
+               lab notes, environment
 ```
 
 The layout follows the plan's "Recommended Repository Structure" (§27) exactly. The repository is

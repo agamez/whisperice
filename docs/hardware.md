@@ -47,6 +47,9 @@
 | LEDs | led1 = pin 11 (LEDR_N), led2 = pin 37 (LEDG_N), both **active-low** | spec §11 |
 
 Pin provenance: official iCEBreaker examples @ `cb9e674c` (never invented; AGENTS.md rule 4).
+**The originals are archived in [`docs/hardware/`](hardware/MANIFEST.md)** — both board
+schematics, the pinout legend images, the provenance PCF itself, and the vendor datasheets as
+they are fetched (see that manifest's manual-fetch list for R2/R3/R4/R6 backing documents).
 **Verify the Pmod header positions against the Digilent reference and the board silkscreen
 before first power-on** — that physical check is ratification item R1 below.
 
